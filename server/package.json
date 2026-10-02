@@ -1,0 +1,24 @@
+{
+  "name": "edjambo-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --no-warnings src/index.js",
+    "dev": "node --env-file-if-exists=.env --no-warnings --watch src/index.js",
+    "seed": "node --env-file-if-exists=.env --no-warnings src/seed.js",
+    "backup": "node --env-file-if-exists=.env --no-warnings src/backup.js",
+    "test": "node --env-file-if-exists=.env --no-warnings --test test/api.test.js test/messages.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "nodemailer": "^10.0.13",
+    "sanitize-html": "^2.17.0"
+  }
+}

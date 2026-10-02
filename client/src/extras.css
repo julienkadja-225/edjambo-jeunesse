@@ -1,0 +1,44 @@
+/* Graphique en barres */
+.chart { display: flex; align-items: flex-end; gap: .6rem; height: 190px; margin-top: .5rem; }
+.chart-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .25rem; }
+.chart-bar { width: 100%; max-width: 56px; flex: 1; display: flex; align-items: flex-end; }
+.chart-bar i { display: block; width: 100%; border-radius: 8px 8px 3px 3px; background: linear-gradient(180deg, var(--violet), #6b93f0); min-height: 3px; transition: height .4s; }
+.chart-col:last-child .chart-bar i { background: linear-gradient(180deg, var(--orange), #ffa070); }
+.chart-val { font-size: .78rem; font-weight: 700; } .chart-lbl { font-size: .78rem; color: var(--muted); text-transform: capitalize; } .chart-sub { font-size: .68rem; color: var(--muted); }
+
+/* Calendrier de cotisation */
+.year-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-top: .8rem; }
+.ym { border-radius: 12px; padding: .55rem .4rem; text-align: center; border: 1px solid var(--line); background: #f7f9fe; }
+.ym b { display: block; font-size: .9rem; } .ym small { display: block; font-size: .72rem; min-height: 1em; color: var(--muted); }
+.ym.approved { background: var(--green-l); border-color: transparent; } .ym.approved small, .ym.approved b { color: var(--green); }
+.ym.pending { background: var(--amber-l); border-color: transparent; } .ym.pending small, .ym.pending b { color: var(--amber); }
+.ym.rejected, .ym.missed { background: var(--red-l); border-color: transparent; } .ym.rejected small, .ym.rejected b, .ym.missed small, .ym.missed b { color: var(--red); }
+.ym.due { background: #fff; border: 2px dashed var(--orange); } .ym.due small, .ym.due b { color: #c2410c; }
+.ym.future { opacity: .5; }
+@media (min-width: 640px) { .year-grid { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 960px) { .year-grid { grid-template-columns: repeat(12, 1fr); } .ym { padding: .6rem .2rem; } }
+
+.bulkbar { justify-content: space-between; align-items: center; position: sticky; top: 64px; z-index: 10; }
+input[type=checkbox] { accent-color: var(--violet); width: 17px; height: 17px; }
+
+/* ===== Identité visuelle EDJAMBO ===== */
+.logo { border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(20,36,107,.28); object-fit: contain; display: block; flex: none; }
+.brand.light .logo, .sidebar.admin .logo { box-shadow: 0 0 0 2px rgba(255,255,255,.9); }
+.hero-logo { display: block; margin: 0 auto 1rem; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.35), 0 12px 32px rgba(0,0,0,.35); }
+.hero {
+  background:
+    radial-gradient(900px 400px at 85% -10%, rgba(239,74,45,.35), transparent),
+    linear-gradient(180deg, rgba(19,40,107,.86) 0%, rgba(30,64,175,.78) 60%, rgba(19,40,107,.9) 100%),
+    url('/edjambo-paysage.jpg') center / cover no-repeat;
+}
+@media (min-width: 960px) {
+  .auth-brand {
+    background:
+      radial-gradient(700px 400px at 100% 0%, rgba(239,74,45,.4), transparent),
+      linear-gradient(160deg, rgba(19,40,107,.88), rgba(30,64,175,.8)),
+      url('/edjambo-paysage.jpg') center / cover no-repeat;
+  }
+}
+.hero .btn.ghost, .auth-brand .btn.ghost { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.55); }
+.hero .btn.ghost:hover { background: rgba(255,255,255,.22); }
+.pill { background: rgba(255,255,255,.18); }

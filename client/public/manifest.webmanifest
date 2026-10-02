@@ -1,0 +1,15 @@
+{
+  "name": "Jeunesse d'EDJAMBO",
+  "short_name": "Jeunesse EDJAMBO",
+  "description": "Forum, votes, annonces et cotisations de la jeunesse d'EDJAMBO",
+  "lang": "fr",
+  "start_url": "/accueil",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#1e40af",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/favicon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

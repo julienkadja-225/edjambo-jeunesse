@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Jeunesse d'EDJAMBO">
+  <defs>
+    <clipPath id="c"><circle cx="64" cy="64" r="57"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f86e6"/><stop offset="1" stop-color="#bfe4ff"/></linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1b7fd0"/><stop offset="1" stop-color="#37a5ee"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="#fff"/>
+  <g clip-path="url(#c)">
+    <rect width="128" height="128" fill="url(#sky)"/>
+    <!-- nuages -->
+    <g fill="#fff" opacity=".92"><ellipse cx="34" cy="30" rx="15" ry="6"/><ellipse cx="44" cy="26" rx="9" ry="6"/><ellipse cx="98" cy="22" rx="13" ry="5"/><ellipse cx="106" cy="19" rx="7" ry="4.5"/></g>
+    <!-- collines boisées -->
+    <path d="M0 74 C18 62 34 66 52 70 C72 64 92 60 128 72 L128 90 L0 90 Z" fill="#1e6b3b"/>
+    <path d="M0 80 C24 72 44 76 64 78 C86 72 104 74 128 80 L128 92 L0 92 Z" fill="#2a8a4a"/>
+    <!-- rivière -->
+    <path d="M0 86 C26 82 50 90 76 86 C100 82 114 84 128 86 L128 100 L0 100 Z" fill="url(#river)"/>
+    <path d="M10 91 q8 -3 16 0 M44 95 q9 -3 18 0 M84 91 q8 -3 16 0" stroke="#fff" stroke-opacity=".55" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <!-- berge & village -->
+    <path d="M0 100 C30 96 60 102 90 98 C108 96 120 98 128 99 L128 128 L0 128 Z" fill="#3c9d4d"/>
+    <g>
+      <rect x="82" y="96" width="17" height="11" fill="#f6ecdc"/><polygon points="79,97 90.5,88 102,97" fill="#c2542d"/><rect x="88" y="100" width="5" height="7" fill="#8d3a1b"/>
+      <rect x="64" y="99" width="14" height="9" fill="#efe3cf"/><polygon points="62,100 71,93 80,100" fill="#2a6fb5"/>
+      <rect x="100" y="100" width="13" height="9" fill="#f6ecdc"/><polygon points="98,101 106.5,94 115,101" fill="#d8693a"/>
+    </g>
+    <!-- palmier -->
+    <path d="M36 112 C38 98 41 86 46 70" stroke="#7a4a24" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <g stroke="#14703a" stroke-width="3.6" fill="none" stroke-linecap="round">
+      <path d="M46 70 Q38 57 22 59"/><path d="M46 70 Q44 53 33 46"/><path d="M46 70 Q52 52 66 50"/>
+      <path d="M46 70 Q60 58 72 66"/><path d="M46 70 Q36 70 27 79"/><path d="M46 70 Q57 73 62 82"/>
+    </g>
+    <circle cx="46" cy="71" r="2.6" fill="#7a4a24"/>
+  </g>
+  <!-- anneau -->
+  <circle cx="64" cy="64" r="59.5" fill="none" stroke="#14246b" stroke-width="5"/>
+  <circle cx="64" cy="64" r="56.2" fill="none" stroke="#fff" stroke-width="1.4" opacity=".85"/>
+  <!-- flamme de la jeunesse -->
+  <g transform="translate(86 14)"><circle cx="12" cy="12" r="12" fill="#e8312f" stroke="#fff" stroke-width="2"/><path d="M12 4s5.5 4.2 5.5 9.2a5.5 5.5 0 01-11 0c0-2 1-3.2 2.2-4.2.2 2 1.2 3 2.2 3 0-3-.6-5 1.1-8z" fill="#fff"/></g>
+</svg>

@@ -9,6 +9,8 @@ process.env.DB_PATH = path.join(tmp, 'test.db');
 process.env.UPLOAD_DIR = path.join(tmp, 'uploads');
 process.env.SEED_MEMBERS = '60';
 process.env.AUTH_RATE_LIMIT = '1000';
+process.env.API_RATE_LIMIT = '100000';
+process.env.API_RATE_LIMIT_ANON = '100000';
 
 let server, base;
 before(async () => {

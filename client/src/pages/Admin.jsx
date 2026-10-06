@@ -4,11 +4,12 @@ import { del, download, get, patch, post, put, upload } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import Icon from '../icons.jsx';
 import {
-  Async, Avatar, BarChart, Badge, Debounced, Empty, Field, Modal, PageHeader, Pager, ProofViewer, RichEditor, Stat,
+  Async, Avatar, BarChart, Badge, SmsAnalysis, SmsBadge, Debounced, Empty, Field, Modal, PageHeader, Pager, ProofViewer, RichEditor, Stat,
   fmtDate, fmtDateTime, fmtMoney, fmtMonth, fullName, toLocalInput, useConfirm, useLoad, useQueryState, useToast,
 } from '../ui.jsx';
 import { ForumModeration } from './Forum.jsx';
 import { Audit, Results } from './Elections.jsx';
+import { AdminFinance, SmsGateway } from './AdminFinance.jsx';
 
 /* ================= Vue d'ensemble ================= */
 function Overview() {
@@ -117,9 +118,9 @@ function Members() {
       {sel.size > 0 && <div className="alert violet bulkbar"><span><b>{sel.size}</b> inscription(s) sélectionnée(s)</span><span className="row"><button className="btn green sm" onClick={bulkApprove}>Approuver la sélection</button><button className="btn ghost sm" onClick={() => setSel(new Set())}>Annuler</button></span></div>}
       <div className="filters">
         <div className="wide"><Debounced type="search" placeholder="Nom, email, téléphone…" value={q.q} onChange={(v) => set({ q: v })} /></div>
-        <select value={q.status} onChange={(e) => set({ status: e.target.value })}><option value="">Tous statuts</option><option value="pending">En attente</option><option value="active">Actif</option><option value="suspended">Suspendu</option><option value="inactive">Inactif</option></select>
-        <select value={q.payment} onChange={(e) => set({ payment: e.target.value })}><option value="">Cotisation (tous)</option><option value="paid">À jour</option><option value="unpaid">Non payée</option></select>
-        <select value={q.neighborhood} onChange={(e) => set({ neighborhood: e.target.value })}><option value="">Tous quartiers</option>{(hoods.data || []).map((h) => <option key={h}>{h}</option>)}</select>
+        <select aria-label="Filtrer par statut" value={q.status} onChange={(e) => set({ status: e.target.value })}><option value="">Tous statuts</option><option value="pending">En attente</option><option value="active">Actif</option><option value="suspended">Suspendu</option><option value="inactive">Inactif</option></select>
+        <select aria-label="Filtrer par état de cotisation" value={q.payment} onChange={(e) => set({ payment: e.target.value })}><option value="">Cotisation (tous)</option><option value="paid">À jour</option><option value="unpaid">Non payée</option></select>
+        <select aria-label="Filtrer par quartier" value={q.neighborhood} onChange={(e) => set({ neighborhood: e.target.value })}><option value="">Tous quartiers</option>{(hoods.data || []).map((h) => <option key={h}>{h}</option>)}</select>
         <label className="field"><span>Inscrit après</span><input type="date" value={q.from} onChange={(e) => set({ from: e.target.value })} /></label>
         <label className="field"><span>Inscrit avant</span><input type="date" value={q.to} onChange={(e) => set({ to: e.target.value })} /></label>
       </div>
@@ -171,7 +172,8 @@ function Payments() {
   const toast = useToast();
   const stats = useLoad(() => get('/contributions/stats'), []);
   const [tab, setTab] = useState('pending');
-  const [q, set, setQ] = useQueryState({ q: '', month: '', page: 1 });
+  const [q, set, setQ] = useQueryState({ q: '', month: '', level: '', page: 1 });
+  const confirm = useConfirm();
   const list = useLoad(() => (tab === 'defaulters' ? get('/contributions/defaulters', { page: q.page, limit: 20 }) : get('/contributions', { status: tab === 'history' ? '' : 'pending', ...q, limit: 15 })), [tab, q]);
   const [review, setReview] = useState(null);
   const [rejecting, setRejecting] = useState(false);
@@ -180,6 +182,12 @@ function Payments() {
   const approve = async (c) => { try { await post(`/contributions/${c.id}/approve`); toast('Cotisation validée '); setReview(null); refresh(); } catch (e) { toast(e.message, 'err'); } };
   const reject = async (c, reason) => { try { await post(`/contributions/${c.id}/reject`, { reason }); toast('Cotisation rejetée'); setRejecting(false); setReview(null); refresh(); } catch (e) { toast(e.message, 'err'); } };
   const exportPayments = async () => { try { await download('/contributions/export.csv', { status: tab === 'history' ? '' : tab === 'pending' ? 'pending' : '', month: q.month, q: q.q }, 'cotisations.csv'); } catch (e) { toast(e.message, 'err'); } };
+  const bulkApprove = async () => {
+    const r = await get('/contributions', { status: 'pending', level: 'consistent', limit: 100 });
+    if (!r.items.length) return toast('Aucun paiement cohérent en attente');
+    if (!(await confirm({ title: `Valider ${r.items.length} paiement(s) cohérent(s) ?`, message: 'Le SMS de chaque paiement correspond au compte, au montant attendu et à une référence unique. Les membres seront notifiés.', confirmLabel: 'Valider' }))) return;
+    try { const x = await post('/contributions/bulk-approve', { ids: r.items.map((c) => c.id) }); toast(`${x.approved} paiement(s) validé(s)`); refresh(); } catch (e) { toast(e.message, 'err'); }
+  };
   const remind = async () => { const r = await post('/contributions/reminders'); toast(`${r.sent} rappel(s) envoyé(s) `); };
 
   return (
@@ -192,13 +200,19 @@ function Payments() {
         <div className="stats">
           <Stat label="Total collecté" value={fmtMoney(s.total_collected)} />
           <Stat tone="green" label={`Collecté — ${fmtMonth(s.month)}`} value={fmtMoney(s.month_collected)} sub={`${s.paid_members} / ${s.active_members} membres (${s.rate} %)`} />
-          <Stat tone="orange" label="Preuves en attente" value={s.pending} />
+          <Stat tone="orange" label="Preuves en attente" value={s.pending} sub={`dont ${s.pending_consistent} SMS cohérent(s)`} />
           <Stat tone="red" label="Retardataires" value={s.defaulters} />
         </div>
       )}</Async>
       <div className="chips">
         {[['pending', 'À vérifier'], ['history', 'Historique'], ['defaulters', 'Retardataires']].map(([k, l]) => <button key={k} className={`chip ${tab === k ? 'on' : ''}`} onClick={() => { setTab(k); setQ({ q: '', month: '', page: 1 }); }}>{l}</button>)}
       </div>
+      {tab === 'pending' && (
+        <div className="row between">
+          <div className="chips" style={{ margin: 0 }}>{[['', 'Tous'], ['consistent', 'SMS cohérents'], ['review', 'SMS à vérifier'], ['none', 'Sans SMS']].map(([k, l]) => <button key={k} className={`chip ${q.level === k ? 'on' : ''}`} onClick={() => set({ level: k })}>{l}</button>)}</div>
+          <button className="btn green sm" onClick={bulkApprove}><Icon name="check" size={15} /> Valider les paiements cohérents</button>
+        </div>
+      )}
       {tab !== 'defaulters' && <div className="filters"><div className="wide"><Debounced type="search" placeholder="Nom ou référence…" value={q.q} onChange={(v) => set({ q: v })} /></div>
         {tab === 'history' && <input type="month" value={q.month} onChange={(e) => set({ month: e.target.value })} />}</div>}
       <Async state={list} empty={(d) => !d.items.length}>{(d) => (
@@ -207,12 +221,13 @@ function Payments() {
             <table><thead><tr><th>Membre</th><th>Contact</th><th>Quartier</th><th>État</th></tr></thead>
               <tbody>{d.items.map((m) => <tr key={m.id}><td><b>{fullName(m)}</b></td><td className="small">{m.phone}<br />{m.email}</td><td>{m.neighborhood}</td><td>{m.has_pending ? <Badge s="pending">Preuve en attente</Badge> : <Badge s="unpaid" />}</td></tr>)}</tbody></table>
           ) : (
-            <table><thead><tr><th>Membre</th><th>Mois</th><th>Montant</th><th className="hide-mobile">Moyen</th><th className="hide-mobile">Référence</th><th>Statut</th><th /></tr></thead>
+            <table><thead><tr><th>Membre</th><th>Mois</th><th>Montant</th><th className="hide-mobile">Moyen</th><th className="hide-mobile">Référence</th><th>SMS</th><th>Statut</th><th /></tr></thead>
               <tbody>{d.items.map((c) => (
                 <tr key={c.id}>
                   <td><b>{fullName(c)}</b><div className="muted small">{fmtDate(c.created_at)}</div></td>
                   <td>{fmtMonth(c.month)}</td><td className="nowrap">{fmtMoney(c.amount)}</td>
                   <td className="hide-mobile">{c.method_label}</td><td className="hide-mobile">{c.reference || '—'}</td>
+                  <td><SmsBadge level={c.sms_level} /></td>
                   <td><Badge s={c.status} />{c.reject_reason && <div className="muted small">{c.reject_reason}</div>}</td>
                   <td><button className="btn sm" onClick={() => setReview(c)}>{c.status === 'pending' ? 'Examiner' : 'Voir'}</button></td>
                 </tr>
@@ -230,7 +245,13 @@ function Payments() {
               <div><div className="muted small">Moyen</div><b>{review.method_label}</b></div>
               <div><div className="muted small">Référence saisie</div><b>{review.reference || '—'}</b></div>
             </div>
-            {review.has_proof ? <ProofViewer id={review.id} /> : <div className="alert amber">Aucune capture jointe : vérifiez la référence auprès du compte de réception.</div>}
+            {review.sms_text && (
+              <div className="stack">
+                <SmsAnalysis a={{ level: review.sms_level, sms_flags: review.sms_flags, parsed: null }} />
+                <div><div className="muted small">SMS collé par le membre</div><div className="invite-preview pre">{review.sms_text}</div></div>
+              </div>
+            )}
+            {review.has_proof ? <ProofViewer id={review.id} /> : <div className="alert amber">{review.sms_text ? 'Aucune capture jointe : comparez le SMS au relevé du compte de réception.' : 'Aucune capture jointe : vérifiez la référence auprès du compte de réception.'}</div>}
             {review.status === 'pending'
               ? <div className="row"><button className="btn green" onClick={() => approve(review)}>Approuver</button><button className="btn red" onClick={() => setRejecting(true)}>Rejeter</button></div>
               : <Badge s={review.status} />}
@@ -496,7 +517,7 @@ function Forum() {
 }
 
 /* ================= Équipe (Super Admin) ================= */
-const PERMS = { members: 'Membres', payments: 'Cotisations', forum: 'Forum', announcements: 'Annonces', elections: 'Élections' };
+const PERMS = { members: 'Membres', payments: 'Cotisations', forum: 'Forum', announcements: 'Annonces', elections: 'Élections', finance: 'Finances' };
 
 function Team() {
   const toast = useToast();
@@ -559,7 +580,7 @@ function AuditLog() {
       <PageHeader title="Journal d'activité" subtitle="Traçabilité des actions sensibles réalisées par l'équipe d'administration." />
       <div className="filters">
         <div className="wide"><Debounced type="search" placeholder="Rechercher (nom, détail)…" value={q.q} onChange={(v) => set({ q: v })} /></div>
-        <select value={q.action} onChange={(e) => set({ action: e.target.value })}>
+        <select aria-label="Filtrer par type d'action" value={q.action} onChange={(e) => set({ action: e.target.value })}>
           <option value="">Toutes les actions</option><option value="member">Membres</option><option value="payment">Cotisations</option>
           <option value="election">Élections</option><option value="announcement">Annonces</option><option value="admin">Équipe</option><option value="system">Système</option>
         </select>
@@ -624,6 +645,19 @@ function Reports() {
   );
 }
 
+const NEEDS = { members: 'members', payments: 'payments', paymentInfo: 'payments', elections: 'elections', announcements: 'announcements', forum: 'forum', reports: 'forum', finance: 'finance' };
+const SUPER_ONLY = new Set(['team', 'audit', 'sms']);
+
 export default function Admin({ page }) {
-  return { overview: <Overview />, members: <Members />, payments: <Payments />, paymentInfo: <PaymentInfo />, elections: <Elections />, announcements: <Announcements />, forum: <Forum />, team: <Team />, audit: <AuditLog />, reports: <Reports /> }[page];
+  const { can, isSuper } = useAuth();
+  if ((NEEDS[page] && !can(NEEDS[page])) || (SUPER_ONLY.has(page) && !isSuper)) {
+    return (
+      <div className="card stack" role="alert">
+        <h1>Accès refusé</h1>
+        <p className="muted">Votre rôle ne comprend pas cette rubrique. Demandez la permission au Super Admin si elle vous est nécessaire.</p>
+        <div><Link className="btn" to="/admin">Retour au tableau de bord</Link></div>
+      </div>
+    );
+  }
+  return { overview: <Overview />, members: <Members />, payments: <Payments />, paymentInfo: <PaymentInfo />, elections: <Elections />, announcements: <Announcements />, forum: <Forum />, team: <Team />, audit: <AuditLog />, reports: <Reports />, finance: <AdminFinance />, sms: <SmsGateway /> }[page];
 }

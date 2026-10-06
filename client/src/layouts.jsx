@@ -19,6 +19,7 @@ function Shell({ items, admin, children }) {
   const roleLabel = user.role === 'super_admin' ? 'Super Admin' : user.role === 'admin' ? 'Administrateur' : 'Membre';
   return (
     <div className="shell">
+      <a className="skip-link" href="#main">Aller au contenu</a>
       <header className="topbar">
         <button className="icon-btn menu-btn" onClick={() => setOpen(true)} aria-label="Ouvrir le menu"><Icon name="menu" /></button>
         <Link to={admin ? '/admin' : '/accueil'} className="brand mobile-only"><Logo size={30} /> {admin ? 'Administration' : 'Jeunesse EDJAMBO'}</Link>
@@ -56,7 +57,7 @@ function Shell({ items, admin, children }) {
         </div>
       </aside>
 
-      <main className="main"><Outlet /></main>
+      <main className="main" id="main" tabIndex={-1}><Outlet /></main>
       {children}
     </div>
   );
@@ -72,6 +73,7 @@ export function MemberLayout() {
     { to: '/propositions', icon: 'bulb', label: 'Propositions' },
     { to: '/elections', icon: 'vote', label: 'Votes & élections' },
     { to: '/cotisations', icon: 'wallet', label: 'Mes cotisations' },
+    { to: '/finances', icon: 'chart', label: 'Finances' },
     { to: '/membres', icon: 'users', label: 'Annuaire' },
     { to: '/profil', icon: 'user', label: 'Mon profil' },
     ...(isAdmin ? [{ group: 'Administration' }, { to: '/admin', icon: 'dashboard', label: 'Espace admin' }] : []),
@@ -97,10 +99,11 @@ export function AdminLayout() {
     { to: '/admin', icon: 'dashboard', label: "Vue d'ensemble", end: true },
     ...(can('members') ? [{ to: '/admin/membres', icon: 'users', label: 'Membres' }] : []),
     ...(can('payments') ? [{ to: '/admin/paiements', icon: 'check-circle', label: 'Cotisations' }, { to: '/admin/paiement-infos', icon: 'bank', label: 'Infos de paiement' }] : []),
+    ...(can('finance') ? [{ to: '/admin/finances', icon: 'chart', label: 'Finances' }] : []),
     ...(can('elections') ? [{ to: '/admin/elections', icon: 'vote', label: 'Élections' }] : []),
     ...(can('announcements') ? [{ to: '/admin/annonces', icon: 'megaphone', label: 'Annonces' }] : []),
     ...(can('forum') ? [{ to: '/admin/forum', icon: 'shield', label: 'Modération forum' }, { to: '/admin/signalements', icon: 'flag', label: 'Messages signalés' }] : []),
-    ...(isSuper ? [{ group: 'Sécurité' }, { to: '/admin/equipe', icon: 'key', label: 'Équipe admin' }, { to: '/admin/journal', icon: 'activity', label: "Journal d'activité" }] : []),
+    ...(isSuper ? [{ group: 'Sécurité' }, { to: '/admin/equipe', icon: 'key', label: 'Équipe admin' }, { to: '/admin/journal', icon: 'activity', label: "Journal d'activité" }, { to: '/admin/sms', icon: 'phone', label: 'SMS & WhatsApp' }] : []),
     { group: 'Portail' }, { to: '/accueil', icon: 'back', label: 'Portail membre' },
   ];
   return <Shell items={items} admin />;

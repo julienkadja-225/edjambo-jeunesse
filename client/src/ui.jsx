@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Component, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchBlobUrl } from './api.js';
 import Icon from './icons.jsx';
@@ -131,14 +131,28 @@ export function Pager({ data, onPage }) {
 }
 
 export function Modal({ title, onClose, children, wide }) {
+  const box = useRef(null);
   useEffect(() => {
-    const h = (e) => e.key === 'Escape' && onClose();
-    document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
+    // accessibilité : le focus entre dans la fenêtre, reste piégé dedans (Tab) et revient à l'élément d'origine à la fermeture
+    const previous = document.activeElement;
+    const focusables = () => [...box.current.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])')];
+    (focusables().find((el) => el.hasAttribute('autofocus')) || box.current).focus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') return onClose();
+      if (e.key !== 'Tab') return;
+      const f = focusables();
+      if (!f.length) return e.preventDefault();
+      const first = f[0];
+      const last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === box.current)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('keydown', onKey); previous?.focus?.(); };
   }, [onClose]);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={box} tabIndex={-1} className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head"><h3>{title}</h3><button className="icon-btn" onClick={onClose} aria-label="Fermer"><Icon name="x" size={18} /></button></div>
         {children}
       </div>
@@ -192,21 +206,23 @@ export function RichEditor({ value, onChange }) {
   );
 }
 
-/* ---------- Visionneuse de preuve (fichier protégé) ---------- */
-export function ProofViewer({ id }) {
+/* ---------- Visionneuse de fichier protégé (preuve de paiement, justificatif) ---------- */
+export function FileViewer({ path }) {
   const [file, setFile] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => {
     let url;
-    fetchBlobUrl(`/contributions/${id}/proof`).then((f) => { url = f.url; setFile(f); }).catch((e) => setErr(e.message));
+    setFile(null); setErr(null);
+    fetchBlobUrl(path).then((f) => { url = f.url; setFile(f); }).catch((e) => setErr(e.message));
     return () => url && URL.revokeObjectURL(url);
-  }, [id]);
+  }, [path]);
   if (err) return <div className="alert red">{err}</div>;
   if (!file) return <Spinner />;
   return file.type === 'application/pdf'
-    ? <iframe className="proof-pdf" src={file.url} title="Preuve de paiement" />
-    : <a href={file.url} target="_blank" rel="noreferrer"><img className="proof-img" src={file.url} alt="Preuve de paiement" /></a>;
+    ? <iframe className="proof-pdf" src={file.url} title="Document" />
+    : <a href={file.url} target="_blank" rel="noreferrer"><img className="proof-img" src={file.url} alt="Document joint" /></a>;
 }
+export const ProofViewer = ({ id }) => <FileViewer path={`/contributions/${id}/proof`} />;
 
 export const Html = ({ html }) => <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />;
 
@@ -272,4 +288,48 @@ export function BarChart({ data, format = (v) => v }) {
       ))}
     </div>
   );
+}
+
+/* ---------- Vérification assistée par SMS ---------- */
+const SMS_LEVELS = { consistent: ['SMS cohérent', 'green'], review: ['SMS à vérifier', 'amber'], none: ['Sans SMS', 'gray'] };
+export const SmsBadge = ({ level }) => <span className={`badge ${SMS_LEVELS[level]?.[1] || 'gray'}`}>{SMS_LEVELS[level]?.[0] || 'Sans SMS'}</span>;
+
+/** Résultat de l'analyse d'un SMS : valeurs lues, puis points de vigilance. */
+export function SmsAnalysis({ a }) {
+  const p = a.parsed;
+  const flags = a.flags || a.sms_flags || [];
+  return (
+    <div className={`alert ${a.level === 'consistent' ? 'green' : 'amber'} sms-analysis`}>
+      <div className="grow">
+        <div className="row between" style={{ marginBottom: '.3rem' }}><b>{a.level === 'consistent' ? 'SMS cohérent avec la cotisation attendue' : 'À vérifier'}</b><SmsBadge level={a.level} /></div>
+        {p && <ul className="sms-list">
+          {p.operator && <li><Icon name="phone" size={14} /> Opérateur : <b>{p.operator}</b></li>}
+          <li><Icon name={p.amount ? 'check' : 'x'} size={14} /> Montant lu : <b>{p.amount ? fmtMoney(p.amount) : 'introuvable'}</b></li>
+          <li><Icon name={p.reference ? 'check' : 'x'} size={14} /> Référence : <b>{p.reference || 'introuvable'}</b></li>
+          {p.date && <li><Icon name="calendar" size={14} /> Date du SMS : <b>{fmtDate(p.date)}</b></li>}
+        </ul>}
+        {flags.length > 0 && <ul className="sms-list warn">{flags.map((f) => <li key={f.code}><Icon name="alert" size={14} /> {f.label}</li>)}</ul>}
+        <p className="small muted" style={{ margin: '.4rem 0 0' }}>Contrôle de cohérence uniquement : l'équipe vérifie ensuite le paiement sur le compte de réception.</p>
+      </div>
+    </div>
+  );
+}
+
+/** Filet de sécurité : une erreur d'affichage ne laisse jamais une page blanche. */
+export class ErrorBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('Erreur d\'affichage :', error, info?.componentStack); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="auth-wrap">
+        <div className="card auth-card stack" role="alert">
+          <h1>Oups, un problème est survenu</h1>
+          <p className="muted">Cette page n'a pas pu s'afficher. Vos données ne sont pas perdues. Rechargez la page ; si le problème persiste, prévenez l'équipe d'administration.</p>
+          <div className="row"><button className="btn" onClick={() => location.reload()}>Recharger la page</button><a className="btn ghost" href="/">Retour à l'accueil</a></div>
+        </div>
+      </div>
+    );
+  }
 }

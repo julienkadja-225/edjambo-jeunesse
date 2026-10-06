@@ -44,6 +44,13 @@ export function loadUser(id) {
   return { ...u, permissions: JSON.parse(u.permissions || '[]') };
 }
 
+/** Identifiant utilisateur d'un jeton valide (sinon null) — sert à limiter le débit par compte plutôt que par adresse IP. */
+export function tokenSubject(req) {
+  const h = req.headers.authorization || '';
+  if (!h.startsWith('Bearer ')) return null;
+  try { return jwt.verify(h.slice(7), SECRET).sub; } catch { return null; }
+}
+
 export function auth(req, _res, next) {
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;

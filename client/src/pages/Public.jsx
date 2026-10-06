@@ -70,7 +70,7 @@ function Landing() {
         <h2>Comment ça marche</h2>
         <div className="steps-grid">{steps.map(([n, t, d]) => <div key={n} className="step"><span className="step-n">{n}</span><h3>{t}</h3><p className="muted">{d}</p></div>)}</div>
       </section>
-      <footer className="land-foot"><Logo size={28} /> <span>© {new Date().getFullYear()} Jeunesse d'EDJAMBO · Tous droits réservés</span></footer>
+      <footer className="land-foot"><Logo size={28} /> <span>© {new Date().getFullYear()} Jeunesse d'EDJAMBO</span><Link to="/confidentialite">Confidentialité</Link></footer>
     </div>
   );
 }
@@ -200,6 +200,7 @@ function ForceChange() {
 function Register() {
   const [f, setF] = useState({ first_name: '', last_name: '', email: '', phone: '', age: '', neighborhood: '', password: '' });
   const [photo, setPhoto] = useState(null);
+  const [terms, setTerms] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -211,6 +212,7 @@ function Register() {
     const form = new FormData();
     Object.entries(f).forEach(([k, v]) => v && form.append(k, v));
     if (photo) form.append('photo', photo);
+    form.append('accept_terms', '1');
     setBusy(true);
     try { await upload('/auth/register', form); setDone(true); } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
@@ -237,9 +239,68 @@ function Register() {
         </div>
         <Field label="Mot de passe" hint="8 caractères minimum, avec lettres et chiffres"><PasswordInput meter required autoComplete="new-password" value={f.password} onChange={set('password')} /></Field>
         <Field label="Photo (facultative)" hint="JPG ou PNG, 5 Mo max"><input type="file" accept="image/jpeg,image/png" onChange={(e) => setPhoto(e.target.files[0] || null)} /></Field>
-        <button className="btn block lg" disabled={busy}>{busy ? 'Envoi…' : "M'inscrire"}</button>
+        <label className="checkbox terms"><input type="checkbox" required checked={terms} onChange={(e) => setTerms(e.target.checked)} /><span>J'ai lu et j'accepte la <Link to="/confidentialite" target="_blank">politique de confidentialité</Link>.</span></label>
+        <button className="btn block lg" disabled={busy || !terms}>{busy ? 'Envoi…' : "M'inscrire"}</button>
       </form>
     </AuthShell>
+  );
+}
+
+
+/* ---------- Politique de confidentialité ---------- */
+function Privacy() {
+  const Sec = ({ t, children }) => <section><h2>{t}</h2>{children}</section>;
+  return (
+    <div className="landing">
+      <header className="land-nav"><Link to="/" className="brand"><Logo /> Jeunesse d'EDJAMBO</Link><Link to="/connexion" className="btn ghost sm">Se connecter</Link></header>
+      <article className="legal">
+        <h1>Politique de confidentialité</h1>
+        <p className="muted">Dernière mise à jour : {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}. Texte à faire valider et compléter par le bureau de la jeunesse (coordonnées du responsable, durées de conservation).</p>
+        <Sec t="Qui est responsable de vos données ?">
+          <p>Le bureau de la Jeunesse d'EDJAMBO, qui gère cette plateforme pour ses membres. Pour toute question ou demande, adressez-vous à un administrateur de la jeunesse ou au bureau.</p>
+        </Sec>
+        <Sec t="Quelles données collectons-nous ?">
+          <ul>
+            <li><b>Votre profil</b> : nom, prénom, âge, quartier, photo (facultative), téléphone et/ou email.</li>
+            <li><b>Vos cotisations</b> : mois, montant, moyen de paiement, référence, preuve de paiement ou SMS de confirmation que vous nous transmettez.</li>
+            <li><b>Votre activité</b> : messages du forum et propositions, réponses, votes sur les propositions, participation aux événements.</li>
+            <li><b>Vos messages privés</b> : conversations avec d'autres membres.</li>
+            <li><b>Vos votes aux élections</b> : secrets. Nous enregistrons seulement <i>que</i> vous avez voté, jamais <i>pour qui</i>.</li>
+            <li><b>Votre consentement</b> aux notifications par SMS / WhatsApp, et la date de votre acceptation de ce texte.</li>
+          </ul>
+        </Sec>
+        <Sec t="Pourquoi ?">
+          <p>Gérer l'association : valider les inscriptions, suivre les cotisations et la caisse, organiser les élections, vous informer des activités et permettre aux jeunes d'échanger. Vos données ne sont ni vendues ni utilisées à des fins publicitaires.</p>
+        </Sec>
+        <Sec t="Qui peut voir quoi ?">
+          <ul>
+            <li>Les membres voient votre nom, votre quartier et votre photo dans l'annuaire. Vos coordonnées ne sont visibles que de l'équipe d'administration.</li>
+            <li>Les finances sont publiées sous forme de totaux : <b>aucun nom de cotisant n'est affiché</b>.</li>
+            <li>Les administrateurs voient vos preuves de paiement, uniquement selon leur rôle. Chaque action sensible est inscrite dans un journal.</li>
+            <li><b>Vos messages privés ne sont pas lisibles par les administrateurs.</b> Seul un message que l'un des participants <i>signale</i> (et les deux précédents) est transmis à la modération.</li>
+            <li>Si l'envoi d'emails ou de SMS est activé, votre numéro ou votre adresse est transmis au prestataire d'envoi uniquement pour acheminer le message.</li>
+          </ul>
+        </Sec>
+        <Sec t="SMS et WhatsApp">
+          <p>Ces notifications sont <b>désactivées par défaut</b>. Vous les activez vous-même dans votre profil et pouvez les arrêter à tout moment.</p>
+        </Sec>
+        <Sec t="Vos droits">
+          <ul>
+            <li><b>Accès et copie</b> : depuis « Mon profil → Mes données », téléchargez toutes vos données.</li>
+            <li><b>Rectification</b> : modifiez votre profil à tout moment.</li>
+            <li><b>Effacement</b> : « Mon profil → Supprimer mon compte » efface vos données personnelles (nom, contacts, photo, messages privés). Les écritures de cotisation (obligation de comptabilité de l'association) et vos contributions au forum sont conservées <i>sans lien avec votre identité</i>, sous la mention « Ancien membre ».</li>
+            <li><b>Opposition</b> : retirez votre consentement aux SMS / WhatsApp quand vous le souhaitez.</li>
+          </ul>
+        </Sec>
+        <Sec t="Sécurité">
+          <p>Mots de passe protégés (hachage), sessions à durée limitée, blocage après plusieurs échecs de connexion, accès aux preuves de paiement restreint, sauvegardes régulières. Aucun système n'est infaillible : choisissez un mot de passe solide et ne le partagez jamais.</p>
+        </Sec>
+        <Sec t="Conservation">
+          <p>Vos données sont conservées tant que votre compte existe. Les données techniques (sessions, notifications lues, journaux d'envoi) sont nettoyées automatiquement.</p>
+        </Sec>
+        <p><Link className="btn" to="/inscription">Retour à l'inscription</Link></p>
+      </article>
+    </div>
   );
 }
 
@@ -269,5 +330,5 @@ function Shared() {
 }
 
 export default function Public({ page }) {
-  return { landing: <Landing />, login: <Login />, register: <Register />, shared: <Shared />, forgot: <Forgot />, reset: <Reset />, forceChange: <ForceChange /> }[page];
+  return { landing: <Landing />, login: <Login />, register: <Register />, shared: <Shared />, privacy: <Privacy />, forgot: <Forgot />, reset: <Reset />, forceChange: <ForceChange /> }[page];
 }

@@ -61,7 +61,7 @@ function List({ type, admin }) {
       </div>}
       <div className="filters">
         <div className="wide"><Debounced type="search" placeholder="Rechercher…" value={q.q} onChange={(v) => set({ q: v })} /></div>
-        {proposals && <select value={q.sort} onChange={(e) => set({ sort: e.target.value })}><option value="top">Les plus soutenues</option><option value="">Les plus récentes</option></select>}
+        {proposals && <select aria-label="Trier" value={q.sort} onChange={(e) => set({ sort: e.target.value })}><option value="top">Les plus soutenues</option><option value="">Les plus récentes</option></select>}
       </div>
       <Async state={state} empty={(d) => !d.items.length}>{(d) => (
         <div className="card">{d.items.map((t) => (

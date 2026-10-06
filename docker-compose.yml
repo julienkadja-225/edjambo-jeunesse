@@ -1,0 +1,31 @@
+# Démarrage : JWT_SECRET=<longue-chaine-aleatoire> APP_URL=https://mon-domaine.org docker compose up -d --build
+# Premier Super Admin (une seule fois) :
+#   docker compose exec jeunesse node --no-warnings src/create-admin.js --email moi@exemple.org --first Prénom --last Nom
+services:
+  jeunesse:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?Définissez JWT_SECRET (longue chaîne aléatoire)}
+      APP_URL: ${APP_URL:-http://localhost:4000}
+      # Facultatif : emails, SMS / WhatsApp (voir server/.env.example)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-console}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      SMS_WEBHOOK_URL: ${SMS_WEBHOOK_URL:-}
+      SMS_WEBHOOK_TOKEN: ${SMS_WEBHOOK_TOKEN:-}
+    volumes:
+      - edjambo-data:/data   # base de données, fichiers envoyés et sauvegardes
+
+volumes:
+  edjambo-data:

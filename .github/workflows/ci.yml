@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-et-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+      - name: Dépendances
+        run: |
+          npm --prefix server ci
+          npm --prefix client ci
+      - name: Tests d'intégration de l'API
+        run: npm --prefix server test
+      - name: Compilation de l'interface
+        run: npm --prefix client run build
+      - name: Audit des dépendances (niveau élevé)
+        run: |
+          npm --prefix server audit --omit=dev --audit-level=high
+          npm --prefix client audit --omit=dev --audit-level=high

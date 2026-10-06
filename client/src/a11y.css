@@ -1,0 +1,20 @@
+/* Accessibilité, pages légales, détails */
+.skip-link { position: fixed; top: -60px; left: 8px; z-index: 200; background: var(--violet); color: #fff; padding: .6rem 1rem; border-radius: 10px; font-weight: 700; transition: top .15s; }
+.skip-link:focus { top: 8px; }
+.main:focus { outline: none; }
+.modal:focus { outline: none; }
+.legal { max-width: 760px; margin: 0 auto; padding: 1.5rem 1.1rem 3rem; }
+.legal h1 { font-size: 1.9rem; }
+.legal h2 { font-size: 1.15rem; margin-top: 1.6rem; color: var(--violet); }
+.legal ul { padding-left: 1.2rem; display: grid; gap: .35rem; }
+.terms { align-items: flex-start; font-size: .92rem; }
+.terms input { margin-top: .2rem; flex: none; }
+.btn.danger { color: var(--red); border-color: #f2b8c0; }
+.btn.danger:hover { background: var(--red-l); }
+.land-foot a { margin-left: .5rem; }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
+/* Mobile : jamais de défilement horizontal de la page */
+input[type=file] { max-width: 100%; }
+.report-sheet { overflow-x: auto; }
+@media (max-width: 640px) { table.plain td, table.plain th { white-space: normal !important; } .report-sheet { padding: 1rem; } }

@@ -2,6 +2,8 @@ import { createApp } from './app.js';
 import { getSetting } from './db.js';
 import { sendContributionReminders } from './utils.js';
 import { runBackup } from './backup.js';
+import { providerInfo, startOutboxWorker } from './gateway.js';
+import { bootstrap, purgeOldData } from './maintenance.js';
 
 const PORT = parseInt(process.env.PORT || '4000');
 createApp().listen(PORT, () => console.log(`API Jeunesse EDJAMBO → http://localhost:${PORT}`));
@@ -17,6 +19,17 @@ setInterval(() => {
     console.error('Rappels :', e);
   }
 }, 6 * 3600 * 1000).unref();
+
+// Passerelle SMS / WhatsApp
+startOutboxWorker();
+console.log(`Notifications SMS/WhatsApp : fournisseur « ${providerInfo().name} »${providerInfo().simulated ? ' (simulation, aucun envoi réel)' : ''}`);
+
+if (bootstrap()) console.log('Catégories du forum créées.');
+
+// Nettoyage quotidien des données techniques périmées (jetons, files d'envoi, notifications lues)
+const purge = () => { try { purgeOldData(); } catch (e) { console.error('Nettoyage :', e); } };
+purge();
+setInterval(purge, 24 * 3600 * 1000).unref();
 
 // Sauvegarde quotidienne automatique
 if (process.env.AUTO_BACKUP !== '0') {

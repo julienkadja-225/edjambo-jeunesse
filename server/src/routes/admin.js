@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import db from '../db.js';
 import { auth, requireAdmin, requireSuper } from '../auth.js';
 import { runBackup } from '../backup.js';
+import { normalizePhone } from '../gateway.js';
 import { PERMISSIONS, HttpError, audit, bad, currentMonth, notFound, pageResult, paginate, str, validatePassword } from '../utils.js';
 
 const r = Router();
@@ -55,7 +56,7 @@ r.post('/admins', requireSuper, (req, res) => {
   const first_name = str(req.body.first_name, { min: 2, max: 60, label: 'Prénom' });
   const last_name = str(req.body.last_name, { min: 2, max: 60, label: 'Nom' });
   const email = String(req.body.email || '').trim().toLowerCase() || null;
-  const phone = String(req.body.phone || '').replace(/[\s.\-()]/g, '') || null;
+  const phone = normalizePhone(req.body.phone) || null;
   if (!email && !phone) throw bad('Email ou téléphone requis');
   validatePassword(req.body.password);
   if (email && db.prepare('SELECT 1 FROM users WHERE email=?').get(email)) throw new HttpError(409, 'Email déjà utilisé');
@@ -67,6 +68,7 @@ r.post('/admins', requireSuper, (req, res) => {
       "INSERT INTO users(role, permissions, first_name, last_name, email, phone, password_hash, neighborhood, status, approved_at) VALUES('admin',?,?,?,?,?,?,'Bureau','active',?)"
     )
     .run(JSON.stringify(perms(req.body.permissions)), first_name, last_name, email, phone, bcrypt.hashSync(req.body.password, 10), new Date().toISOString());
+  db.prepare('UPDATE users SET must_change_password = 1 WHERE id = ?').run(Number(info.lastInsertRowid)); // il choisira son propre mot de passe
   audit(req.user.id, 'admin.create', 'user', Number(info.lastInsertRowid), `${first_name} ${last_name} — ${perms(req.body.permissions).join(',')}`);
   res.status(201).json({ id: Number(info.lastInsertRowid) });
 });
@@ -89,7 +91,13 @@ r.put('/admins/:id', requireSuper, (req, res) => {
 
 r.delete('/admins/:id', requireSuper, (req, res) => {
   const id = parseInt(req.params.id);
-  const info = db.prepare("DELETE FROM users WHERE id = ? AND role = 'admin'").run(id);
+  let info;
+  try {
+    info = db.prepare("DELETE FROM users WHERE id = ? AND role = 'admin'").run(id);
+  } catch (e) {
+    if (/FOREIGN KEY/i.test(e.message)) throw new HttpError(409, 'Cet administrateur a déjà réalisé des actions enregistrées (validations, dépenses, élections…) : suspendez son compte plutôt que de le supprimer.');
+    throw e;
+  }
   if (!info.changes) throw notFound();
   audit(req.user.id, 'admin.delete', 'user', id);
   res.json({ ok: true });

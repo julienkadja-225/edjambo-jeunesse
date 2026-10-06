@@ -1,6 +1,6 @@
 # API — Plateforme Jeunesse d'EDJAMBO
 
-Base : `/api` · JSON · authentification `Authorization: Bearer <accessToken>` (sauf mention « public »).
+Base : `/api` · JSON · limite : 900 requêtes/min par compte connecté, 240/min par IP pour les anonymes (HTTP 429) · authentification `Authorization: Bearer <accessToken>` (sauf mention « public »).
 Erreurs : `{ "error": "message en français" }` avec le code HTTP adapté (400, 401, 403, 404, 409, 413).
 Listes paginées : `?page=1&limit=20` → `{ items, total, page, limit, pages }`.
 
@@ -10,7 +10,7 @@ Légende : 🔓 public · 👤 tout utilisateur connecté · 🛠️ admin avec 
 ## Authentification
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| POST | `/auth/register` | 🔓 | `multipart` : `first_name, last_name, age, neighborhood, password, email` et/ou `phone`, `photo` (JPG/PNG ≤ 5 Mo). Compte créé en statut `pending`. |
+| POST | `/auth/register` | 🔓 | `multipart` : `first_name, last_name, age, neighborhood, password, accept_terms (obligatoire), email` et/ou `phone` (stocké au format international), `photo` (JPG/PNG ≤ 5 Mo). Compte créé en statut `pending`. |
 | POST | `/auth/login` | 🔓 | `{identifier (email ou téléphone), password}` → `{user, accessToken (15 min), refreshToken (7 j)}`. 403 si compte en attente/suspendu/inactif. |
 | POST | `/auth/refresh` | 🔓 | `{refreshToken}` → nouveaux jetons (rotation : l'ancien refresh est invalidé). |
 | POST | `/auth/logout` | 🔓 | `{refreshToken}` — révoque la session. |
@@ -19,6 +19,8 @@ Légende : 🔓 public · 👤 tout utilisateur connecté · 🛠️ admin avec 
 | POST | `/auth/reset` | 🔓 | `{token, password}` — définit le nouveau mot de passe, ferme toutes les sessions, notifie le membre. |
 | GET | `/auth/me` | 👤 | Profil courant. |
 | PUT | `/auth/me` | 👤 | `multipart` : mise à jour du profil + `photo`. |
+| GET | `/auth/me/export` | 👤 | Télécharge toutes ses données personnelles (JSON) : profil, cotisations, forum, messages envoyés, participation aux élections (jamais le choix), notifications… |
+| DELETE | `/auth/me` | 👤 membre | `{password}` — supprime le compte : données personnelles et messages privés effacés, compte anonymisé (« Ancien membre »), cotisations et contenu du forum conservés sans identité. Refusé pour les comptes d'administration. |
 | PUT | `/auth/me/password` | 👤 | `{current, next}` — règle : 8 caractères min., lettres + chiffres, différent de l'actuel. Révoque les autres sessions et renvoie une nouvelle session `{user, accessToken, refreshToken}`. Seule route (avec `/auth/*`) accessible quand `must_change_password` est vrai. |
 
 **Sécurité des connexions** : après 5 échecs consécutifs, le compte est verrouillé 15 min (HTTP 423). Un mot de passe temporaire impose le changement : toute autre route répond `403` avec `code: "PASSWORD_CHANGE_REQUIRED"`.
@@ -39,15 +41,17 @@ Légende : 🔓 public · 👤 tout utilisateur connecté · 🛠️ admin avec 
 | GET | `/payment-methods` | 👤 | Comptes de paiement affichés (les admins `payments` voient aussi les inactifs). |
 | POST/PUT/DELETE | `/payment-methods[/:id]` | 🛠️ payments | `{type: bank\|mobile_money, label, account_number, account_name, details, active}`. |
 | GET/PUT | `/contribution-settings` | 👤 / 🛠️ payments | `monthly_amount, grace_days, reminder_day`. |
-| POST | `/contributions` | 👤 membre | `multipart` : `month (AAAA-MM), method_id, amount, reference, proof` (JPG/PNG/PDF ≤ 5 Mo). Preuve **ou** référence requise. 409 si mois déjà payé/en attente ou référence déjà utilisée. |
+| POST | `/contributions` | 👤 membre | `multipart` : `month (AAAA-MM), method_id, amount, reference, proof, sms_text` — le SMS est ré-analysé côté serveur (le client ne peut pas imposer le niveau de cohérence) ; capture, SMS ou référence suffisent (JPG/PNG/PDF ≤ 5 Mo). Preuve **ou** référence requise. 409 si mois déjà payé/en attente ou référence déjà utilisée. |
 | GET | `/contributions/mine` | 👤 | Historique + `current_status` + `up_to_date`. |
 | GET | `/contributions/:id/proof` | auteur ou 🛠️ payments | Fichier de la preuve (accès protégé). |
-| GET | `/contributions` | 🛠️ payments | File de vérification. Filtres : `status, month, q`. |
+| GET | `/contributions` | 🛠️ payments | File de vérification. Filtres : `status, month, q, level (consistent, review, none)`. Chaque ligne contient `sms_level`, `sms_flags`, `sms_text`. |
 | POST | `/contributions/:id/approve` | 🛠️ payments | Valide et notifie le membre. |
 | POST | `/contributions/:id/reject` | 🛠️ payments | `{reason}` obligatoire. |
 | GET | `/contributions/stats` | 🛠️ payments | Total collecté, mois courant, taux, en attente, retardataires, historique 6 mois. |
 | GET | `/contributions/defaulters` | 🛠️ payments | Membres actifs sans cotisation validée pour le mois. |
 | POST | `/contributions/reminders` | 🛠️ payments | Envoie les rappels (aussi automatique, voir `reminder_day`). |
+| POST | `/contributions/parse-sms` | 👤 | `{text}` — analyse un SMS de confirmation Mobile Money (Orange, MTN, Moov, Wave) : renvoie `parsed` (opérateur, montant, référence, date), `flags` (incohérences), `level` (`consistent` ou `review`) et `suggested` (compte, montant, référence à pré-remplir). Contrôle de **cohérence** uniquement (compte destinataire connu, montant ≥ cotisation attendue, référence jamais utilisée, date récente), pas d'authenticité. |
+| POST | `/contributions/bulk-approve` | 🛠️ payments | `{ids[]}` — valide en masse, mais **uniquement** les paiements en attente dont le SMS est cohérent (les autres sont ignorés). |
 
 ## Forum & propositions
 | Méthode | Route | Accès | Description |
@@ -92,6 +96,39 @@ Légende : 🔓 public · 👤 tout utilisateur connecté · 🛠️ admin avec 
 | PUT/DELETE | `/announcements/:id` | 🛠️ announcements | Modification (`remove_media=1` pour retirer) / suppression. |
 | POST | `/announcements/:id/rsvp` | 👤 | Bascule la participation. |
 | POST | `/announcements/:id/reshare` | 👤 | Bascule la republication sur le profil. |
+
+## Finances (transparence)
+
+Principe : solde = solde initial + cotisations validées − dépenses validées. Une dépense n'est comptabilisée qu'après validation par un **responsable financier différent de son auteur** (double validation). Les membres voient les chiffres globaux et les dépenses validées, jamais le nom d'un cotisant.
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| GET | `/finance/meta` | 👤 | Catégories de dépenses et seuil de justificatif obligatoire. |
+| GET | `/finance/summary` | 👤 | Solde, recettes/dépenses du mois et totales, historique 12 mois, dépenses par catégorie, budgets de l'année. |
+| GET | `/finance/expenses` | 👤 | Dépenses (membres : validées uniquement, sans noms ; 🛠️ finance : tous statuts, auteurs et validateurs). Filtres : `status, category, month, q`. |
+| POST | `/finance/expenses` | 🛠️ finance | `multipart` : `amount, category, description, spent_at, receipt` (justificatif obligatoire au-delà du seuil). Notifie les autres responsables. |
+| PUT / DELETE | `/finance/expenses/:id` | 🛠️ finance (auteur) | Modification (une dépense rejetée corrigée repasse « en attente ») / suppression. 409 si déjà validée. |
+| POST | `/finance/expenses/:id/approve` · `/reject` | 🛠️ finance | `reject` : `{reason}`. 403 si le valideur est l'auteur. Journalisé. |
+| GET | `/finance/expenses/:id/receipt` | 🛠️ finance / membres | Justificatif (membres : dépenses validées, si la transparence des justificatifs est activée). |
+| GET | `/finance/expenses.csv` | 🛠️ finance | Export CSV (`?month=`). |
+| GET / PUT | `/finance/settings` | 🛠️ finance | `opening_balance, public_receipts, receipt_required_above`. |
+| PUT / DELETE | `/finance/budgets[/:year/:category]` | 🛠️ finance | `{year, category, amount}`. |
+| GET | `/finance/report?month=AAAA-MM` | 👤 | Rapport mensuel (ouverture, recettes par moyen de paiement, dépenses, clôture). Version PDF : page imprimable `/finances/rapport`. |
+| POST | `/finance/report/publish` | 🛠️ finance | Publie le rapport du mois en annonce et notifie les membres. |
+
+## Passerelle SMS / WhatsApp
+
+Les messages sont **mis en file** (table `outbox`) et envoyés par un processus d'arrière-plan (toutes les 15 s, 3 tentatives avec délai croissant). Envoi **uniquement** aux membres qui ont donné leur accord, pour les événements activés, dans la limite du plafond journalier. Fournisseurs : `console` (simulation, par défaut), `twilio` (SMS + WhatsApp), `webhook` (POST JSON vers l'API de votre opérateur). Voir `server/.env.example`.
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| PUT | `/auth/me/notification-prefs` | 👤 | `{sms_optin, whatsapp_optin}` — consentement (numéro de téléphone requis). |
+| GET | `/notifications/channels` | 👤 | Canaux disponibles et événements concernés (affiché avant consentement). |
+| GET | `/admin/sms/status` | 👑 | Fournisseur, événements activés, plafond, statistiques du mois, coût estimé, nombre de consentements. |
+| PUT | `/admin/sms/settings` | 👑 | `{events[], daily_cap, unit_cost, default_country_code}`. |
+| GET | `/admin/sms/outbox` | 👑 | Journal d'envoi (`status`, `channel`) ; numéros masqués. |
+| POST | `/admin/sms/test` | 👑 | `{channel}` — envoie un message de test à son propre numéro. |
+| POST | `/admin/sms/process` · `/retry-failed` | 👑 | Envoi immédiat de la file / remise en file des échecs. |
 
 ## Messagerie (discussions privées et groupes)
 

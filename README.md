@@ -26,7 +26,7 @@ Version « production » (un seul processus qui sert l'API **et** l'interface) :
 npm run build && npm start      # http://localhost:4000
 ```
 
-Tests d'intégration de l'API : `npm test`.
+Tests d'intégration de l'API (38 tests, exécutés automatiquement par GitHub Actions à chaque envoi) : `npm test`.
 
 ## Comptes de test (après `npm run seed`)
 
@@ -53,6 +53,30 @@ Tests d'intégration de l'API : `npm test`.
 3. **Vote** : membre1 vote dans « Président de la Jeunesse » (reçu fourni) ; membre4 (non à jour) est bloqué tant que sa cotisation n'est pas validée. Un admin élections suit la participation en direct, clôture, publie, puis l'audit devient public.
 4. **Annonces** : un admin forum/annonces publie avec éditeur riche + média → tous les membres sont notifiés → republication et lien de partage public `/a/<id>`.
 5. **Forum / propositions** : discussions, réponses, « j'aime », vote ▲▼ sur les propositions ; épinglage / fermeture / masquage côté admin.
+
+## Transparence financière
+
+Rubrique « Finances » (membres) et `/admin/finances` (permission **finances**) :
+
+- **Dépenses** saisies avec catégorie, date et justificatif (obligatoire au-delà d'un seuil réglable). **Double validation** : une dépense ne compte qu'une fois validée par un responsable *différent* de son auteur ; tout est inscrit au journal d'activité.
+- **Solde de la caisse** = solde initial + cotisations validées − dépenses validées ; recettes et dépenses sur 12 mois, dépenses par catégorie, **budget prévisionnel** suivi par catégorie.
+- **Vue membres** : chiffres globaux et dépenses validées (avec justificatifs, désactivables). Aucun nom de cotisant n'est jamais affiché.
+- **Rapport mensuel** : version imprimable / PDF (`/finances/rapport`, bouton « Imprimer / enregistrer en PDF »), publication en un clic dans les annonces, export CSV des dépenses.
+- Comptes de démo : `nadia@edjambo.org` (saisit) et `aicha@edjambo.org` (valide) ; une dépense « à valider » est déjà présente.
+
+## Vérification assistée des paiements
+
+Le membre colle le SMS de confirmation Orange Money / MTN MoMo / Moov / Wave : la plateforme lit le **montant, la référence, la date et le numéro destinataire**, pré-remplit le formulaire et contrôle la **cohérence** (compte de l'association, montant ≥ cotisation, référence jamais utilisée, date récente). Côté admin, chaque preuve porte un badge **SMS cohérent / à vérifier / sans SMS**, et « Valider les paiements cohérents » traite d'un clic tous ceux qui ne présentent aucune anomalie.
+
+⚠️ Un SMS peut être falsifié : le badge indique une cohérence, pas une authenticité. Vérifiez régulièrement le relevé du compte de réception.
+
+## Notifications SMS et WhatsApp
+
+- **Consentement obligatoire** : chaque membre active SMS et/ou WhatsApp dans son profil (désactivé par défaut) et peut se rétracter à tout moment.
+- **Super Admin → « SMS & WhatsApp »** : choix des événements (rappels de cotisation, paiements, inscription, élections, événements, annonces, sécurité, messagerie), **plafond journalier**, coût estimé, journal d'envoi (numéros masqués), test, relance des échecs.
+- File d'envoi persistante avec 3 tentatives ; un rappel de cotisation n'est envoyé qu'une fois par mois et par membre.
+- Par défaut le fournisseur est **« console »** : les messages sont simulés (affichés dans la console du serveur). Pour envoyer réellement, copiez `server/.env.example` en `server/.env` et renseignez **Twilio** (SMS + WhatsApp) ou une **URL webhook** vers l'API SMS de votre opérateur. Chaque message réel est facturé par le fournisseur.
+- Comptes de démo : `membre1`, `membre3`, `membre4`, `membre5` (SMS) et `membre6`, `membre7` (WhatsApp) ont déjà consenti.
 
 ## Messagerie privée et de groupe
 
@@ -117,9 +141,23 @@ BACKUP_DIR=./backups   BACKUP_KEEP=14   AUTO_BACKUP=1
 
 ## Sauvegarde des données
 
-- Automatique : une copie cohérente de la base toutes les 24 h dans `server/backups/` (14 conservées).
-- Manuelle : `npm run backup` ou bouton « Sauvegarder la base » (Super Admin).
-- À faire en plus en production : copier `server/backups/` **et** `server/uploads/` vers un stockage externe (disque distant, cloud) ; tester régulièrement la restauration (remplacer `edjambo.db` par une sauvegarde, serveur arrêté).
+- Automatique : toutes les 24 h, un dossier `server/backups/edjambo-<date>/` contenant une copie cohérente de la base **et** des fichiers envoyés (photos, preuves de paiement, justificatifs) ; les 14 dernières sont conservées.
+- Manuelle : `npm run backup` ou bouton « Sauvegarder » (Super Admin).
+- À faire en plus en production : copier `server/backups/` vers un stockage externe (autre serveur, cloud) ; **tester la restauration** (serveur arrêté, remplacer `edjambo.db` et `uploads/`). Détails dans [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
+
+## Mise en ligne
+
+Guide complet (Docker ou Node/systemd, HTTPS, premier Super Admin, sauvegardes, mises à jour, liste de contrôle) : **[docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)**.
+
+En production : `NODE_ENV=production` + `JWT_SECRET` obligatoires ; `npm run seed` est **refusé** (il efface la base) ; le premier compte se crée avec `npm run create-admin -- --email … --first … --last …`.
+
+## Vos données personnelles
+
+Politique de confidentialité à l'adresse `/confidentialite` (modèle à faire valider par le bureau), acceptée à l'inscription. Chaque membre peut, depuis « Mon profil → Mes données » : **télécharger toutes ses données** (JSON) ou **supprimer son compte** — les données personnelles et les messages privés sont effacés ; les écritures de cotisation et le contenu du forum restent sous « Ancien membre », sans lien avec l'identité.
+
+## Contrôle qualité
+
+Un audit automatisé a été exécuté sur l'ensemble de l'API : droits d'accès par rôle (anonyme, membre, admin limité, Super Admin) sur chaque route, 8 types de données malformées sur chaque route d'écriture (aucun plantage), temps de réponse avec 2 000 membres (quelques millisecondes), dépendances sans vulnérabilité connue. Protections : limitation de débit par compte et par IP, verrouillage après échecs de connexion, politique CSP stricte, fichiers contrôlés par signature, assainissement du HTML, double validation des dépenses, numéros de téléphone normalisés (un numéro = un compte).
 
 ## Passage à PostgreSQL / MySQL
 

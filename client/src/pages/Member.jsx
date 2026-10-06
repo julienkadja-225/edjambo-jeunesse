@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { get, post, put, qs, upload } from '../api.js';
+import { api, download, get, post, put, qs, upload } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import Icon from '../icons.jsx';
 import {
-  Async, Avatar, Badge, Debounced, Empty, Field, Html, Modal, PageHeader, PasswordInput, Pager, Spinner, Stat, fmtDate, fmtDateTime,
+  Async, Avatar, Badge, Debounced, Empty, Field, Html, Modal, PageHeader, PasswordInput, Pager, SmsAnalysis, Spinner, Stat, fmtDate, fmtDateTime,
   fmtMoney, fmtMonth, fullName, useLoad, useQueryState, useToast, ProofViewer,
 } from '../ui.jsx';
 
@@ -46,7 +46,7 @@ function Announcements() {
       <h1>Annonces & événements</h1>
       <div className="filters">
         <div className="wide"><Debounced type="search" placeholder="Rechercher dans l'archive…" value={q.q} onChange={(v) => set({ q: v })} /></div>
-        <select value={q.type} onChange={(e) => set({ type: e.target.value })}><option value="">Tout</option><option value="announcement">Annonces</option><option value="event">Événements</option></select>
+        <select aria-label="Filtrer par type" value={q.type} onChange={(e) => set({ type: e.target.value })}><option value="">Tout</option><option value="announcement">Annonces</option><option value="event">Événements</option></select>
       </div>
       <Async state={state} empty={(d) => !d.items.length}>{(d) => (
         <>{d.items.map((a) => <AnnouncementCard key={a.id} a={a} onChange={state.reload} />)}<Pager data={d} onPage={(page) => setQ({ ...q, page })} /></>
@@ -121,9 +121,22 @@ function Contributions() {
   const [proof, setProof] = useState(null);
   const [f, setF] = useState({ month: '', method_id: '', amount: '', reference: '' });
   const [file, setFile] = useState(null);
+  const [sms, setSms] = useState('');
+  const [analysis, setAnalysis] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const c = mine.data;
+
+  /** Analyse le SMS collé et pré-remplit le formulaire (moyen de paiement, montant, référence). */
+  const analyze = async () => {
+    setAnalyzing(true); setErr('');
+    try {
+      const a = await post('/contributions/parse-sms', { text: sms });
+      setAnalysis(a);
+      setF((p) => ({ ...p, method_id: a.suggested.method_id ? String(a.suggested.method_id) : p.method_id, amount: p.amount || (a.parsed.amount ? String(a.parsed.amount) : ''), reference: p.reference || a.parsed.reference || '' }));
+    } catch (e) { setErr(e.message); } finally { setAnalyzing(false); }
+  };
 
   const months = c ? [0, 1, 2, 3].map((k) => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - k); return d.toISOString().slice(0, 7); }) : [];
   const taken = new Set((c?.items || []).filter((x) => x.status !== 'rejected').map((x) => x.month));
@@ -137,12 +150,13 @@ function Contributions() {
     form.append('method_id', f.method_id || methods.data[0]?.id);
     if (f.amount) form.append('amount', f.amount);
     if (f.reference) form.append('reference', f.reference);
+    if (sms.trim()) form.append('sms_text', sms.trim());
     if (file) form.append('proof', file);
     setBusy(true);
     try {
       await upload('/contributions', form);
       toast('Preuve envoyée, en attente de vérification ');
-      setF({ month: '', method_id: '', amount: '', reference: '' }); setFile(null); e.target.reset(); mine.reload();
+      setF({ month: '', method_id: '', amount: '', reference: '' }); setFile(null); setSms(''); setAnalysis(null); e.target.reset(); mine.reload();
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast('Numéro copié '); } catch { /* */ } };
@@ -186,7 +200,12 @@ function Contributions() {
               <Field label="Montant (FCFA)"><input type="number" min="1" placeholder={settings.data?.monthly_amount} value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
               <Field label="Référence de la transaction"><input type="text" maxLength={80} value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} /></Field>
             </div>
-            <Field label="Capture ou photo de la confirmation" hint="JPG, PNG ou PDF — 5 Mo max. Preuve OU référence obligatoire."><input type="file" accept="image/jpeg,image/png,application/pdf" onChange={(e) => setFile(e.target.files[0] || null)} /></Field>
+            <Field label="SMS de confirmation (Mobile Money)" hint="Copiez-collez le SMS reçu : nous lisons le montant et la référence, et la validation est plus rapide.">
+              <textarea rows={3} maxLength={1000} placeholder="Ex. : Vous avez envoyé 1000 FCFA à … ID de transaction : …" value={sms} onChange={(e) => { setSms(e.target.value); setAnalysis(null); }} />
+            </Field>
+            {sms.trim().length >= 10 && <div><button type="button" className="btn ghost sm" onClick={analyze} disabled={analyzing}>{analyzing ? 'Analyse…' : 'Analyser le SMS'}</button></div>}
+            {analysis && <SmsAnalysis a={analysis} />}
+            <Field label="Capture ou photo de la confirmation" hint="JPG, PNG ou PDF — 5 Mo max. Au choix : capture, SMS ou référence de transaction."><input type="file" accept="image/jpeg,image/png,application/pdf" onChange={(e) => setFile(e.target.files[0] || null)} /></Field>
             <button className="btn" disabled={busy || !methods.data?.length}>{busy ? 'Envoi…' : 'Envoyer la preuve'}</button>
           </form>
         )}
@@ -221,7 +240,7 @@ function Directory() {
       <h1>Annuaire des membres</h1>
       <div className="filters">
         <div className="wide"><Debounced type="search" placeholder="Rechercher un membre…" value={q.q} onChange={(v) => set({ q: v })} /></div>
-        <select value={q.neighborhood} onChange={(e) => set({ neighborhood: e.target.value })}><option value="">Tous les quartiers</option>{(hoods.data || []).map((h) => <option key={h}>{h}</option>)}</select>
+        <select aria-label="Filtrer par quartier" value={q.neighborhood} onChange={(e) => set({ neighborhood: e.target.value })}><option value="">Tous les quartiers</option>{(hoods.data || []).map((h) => <option key={h}>{h}</option>)}</select>
       </div>
       <Async state={state} empty={(d) => !d.items.length}>{(d) => (
         <>
@@ -256,6 +275,72 @@ function MemberProfile() {
 }
 
 /* ================= Profil ================= */
+/** Consentement aux notifications par SMS / WhatsApp (désactivé par défaut, modifiable à tout moment). */
+function NotificationPrefs() {
+  const { user, reload } = useAuth();
+  const toast = useToast();
+  const ch = useLoad(() => get('/notifications/channels'), []);
+  const [busy, setBusy] = useState(false);
+  const save = async (patch) => {
+    setBusy(true);
+    try {
+      await put('/auth/me/notification-prefs', { sms_optin: user.sms_optin, whatsapp_optin: user.whatsapp_optin, ...patch });
+      await reload();
+      toast('Préférences enregistrées');
+    } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
+  const c = ch.data;
+  return (
+    <section className="card stack">
+      <h2>Notifications par SMS et WhatsApp</h2>
+      {!user.phone && <div className="alert amber"><Icon name="info" size={18} /> Ajoutez un numéro de téléphone à votre profil pour activer les SMS et WhatsApp.</div>}
+      <p className="muted" style={{ margin: 0 }}>Recevez sur votre téléphone les messages importants, même sans ouvrir l'application. Vous pouvez arrêter à tout moment.</p>
+      {c && <p className="small" style={{ margin: 0 }}>Messages concernés : {c.events.length ? c.events.join(', ') : 'aucun pour le moment'}.</p>}
+      {c?.simulated && <div className="alert violet small"><Icon name="info" size={16} /> Mode démonstration : aucun message réel n'est envoyé pour l'instant.</div>}
+      <label className="checkbox"><input type="checkbox" disabled={busy || !user.phone || !c?.sms} checked={!!user.sms_optin} onChange={(e) => save({ sms_optin: e.target.checked })} /> Recevoir des SMS {c && !c.sms && <span className="muted small">(indisponible)</span>}</label>
+      <label className="checkbox"><input type="checkbox" disabled={busy || !user.phone || !c?.whatsapp} checked={!!user.whatsapp_optin} onChange={(e) => save({ whatsapp_optin: e.target.checked })} /> Recevoir des messages WhatsApp {c && !c.whatsapp && <span className="muted small">(indisponible)</span>}</label>
+    </section>
+  );
+}
+
+/** Droits sur les données personnelles : copie complète et suppression (anonymisation) du compte. */
+function MyData() {
+  const { user, logout } = useAuth();
+  const toast = useToast();
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState('');
+  const [word, setWord] = useState('');
+  const [busy, setBusy] = useState(false);
+  const exportData = async () => { try { await download('/auth/me/export', null, 'mes-donnees-edjambo.json'); } catch (e) { toast(e.message, 'err'); } };
+  const remove = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try { await api('/auth/me', { method: 'DELETE', body: { password: pw } }); await logout(); toast('Votre compte a été supprimé'); nav('/'); }
+    catch (er) { toast(er.message, 'err'); setBusy(false); }
+  };
+  return (
+    <section className="card stack">
+      <h2>Mes données</h2>
+      <p className="muted" style={{ margin: 0 }}>Vous gardez la maîtrise de vos informations. <Link to="/confidentialite" target="_blank">Lire la politique de confidentialité</Link>.</p>
+      <div className="row">
+        <button className="btn ghost" onClick={exportData}><Icon name="file" size={16} /> Télécharger mes données</button>
+        {user.role === 'member' && <button className="btn ghost danger" onClick={() => setOpen(true)}><Icon name="trash" size={16} /> Supprimer mon compte</button>}
+      </div>
+      {open && (
+        <Modal title="Supprimer mon compte" onClose={() => setOpen(false)}>
+          <form className="stack" onSubmit={remove}>
+            <div className="alert red"><Icon name="alert" size={18} /> <span>Cette action est <b>définitive</b>. Votre nom, vos coordonnées, votre photo et vos messages privés seront effacés. Vos cotisations déjà enregistrées et vos contributions au forum sont conservées <b>sans votre identité</b> (« Ancien membre »).</span></div>
+            <Field label="Votre mot de passe"><PasswordInput required autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+            <Field label="Tapez SUPPRIMER pour confirmer"><input type="text" value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" /></Field>
+            <button className="btn red" disabled={busy || word.trim().toUpperCase() !== 'SUPPRIMER' || !pw}>{busy ? 'Suppression…' : 'Supprimer définitivement mon compte'}</button>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
+}
+
 function Profile() {
   const { user, reload, applySession } = useAuth();
   const toast = useToast();
@@ -293,6 +378,8 @@ function Profile() {
         <Field label="Changer de photo" hint="JPG ou PNG, 5 Mo max"><input type="file" accept="image/jpeg,image/png" onChange={(e) => setPhoto(e.target.files[0] || null)} /></Field>
         <button className="btn">Enregistrer</button>
       </form>
+      <NotificationPrefs />
+      <MyData />
       <form className="card stack" onSubmit={changePw}>
         <h2>Mot de passe</h2>
         <div className="grid2">

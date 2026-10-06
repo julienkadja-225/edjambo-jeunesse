@@ -11,6 +11,7 @@ const Forum = lazy(() => import('./pages/Forum.jsx'));
 const Elections = lazy(() => import('./pages/Elections.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const Messages = lazy(() => import('./pages/Messages.jsx'));
+const Finance = lazy(() => import('./pages/Finance.jsx'));
 
 function Guard({ children, admin }) {
   const { user, loading, isAdmin } = useAuth();
@@ -25,7 +26,7 @@ function Guard({ children, admin }) {
 export default function App() {
   const { user } = useAuth();
   const P = (name, props) => {
-    const C = { Public, Member, Forum, Elections, Admin, Messages }[props.mod];
+    const C = { Public, Member, Forum, Elections, Admin, Messages, Finance }[props.mod];
     return <C page={name} />;
   };
   return (
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/connexion" element={P('login', { mod: 'Public' })} />
         <Route path="/inscription" element={P('register', { mod: 'Public' })} />
         <Route path="/a/:id" element={P('shared', { mod: 'Public' })} />
+        <Route path="/confidentialite" element={P('privacy', { mod: 'Public' })} />
         <Route path="/mot-de-passe-oublie" element={P('forgot', { mod: 'Public' })} />
         <Route path="/reinitialiser/:token" element={P('reset', { mod: 'Public' })} />
         <Route path="/changer-mot-de-passe" element={P('forceChange', { mod: 'Public' })} />
@@ -54,6 +56,8 @@ export default function App() {
           <Route path="/propositions/:id" element={P('thread', { mod: 'Forum' })} />
           <Route path="/messages" element={P('inbox', { mod: 'Messages' })} />
           <Route path="/messages/:id" element={P('inbox', { mod: 'Messages' })} />
+          <Route path="/finances" element={P('overview', { mod: 'Finance' })} />
+          <Route path="/finances/rapport" element={P('report', { mod: 'Finance' })} />
           <Route path="/elections" element={P('list', { mod: 'Elections' })} />
           <Route path="/elections/:id" element={P('detail', { mod: 'Elections' })} />
         </Route>
@@ -69,6 +73,8 @@ export default function App() {
           <Route path="equipe" element={P('team', { mod: 'Admin' })} />
           <Route path="journal" element={P('audit', { mod: 'Admin' })} />
           <Route path="signalements" element={P('reports', { mod: 'Admin' })} />
+          <Route path="finances" element={P('finance', { mod: 'Admin' })} />
+          <Route path="sms" element={P('sms', { mod: 'Admin' })} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

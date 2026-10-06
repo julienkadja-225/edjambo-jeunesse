@@ -1,0 +1,35 @@
+/* ===================== Finances, SMS, rapport imprimable ===================== */
+.dual { display: flex; align-items: flex-end; gap: .35rem; height: 190px; margin-top: .6rem; }
+.dual-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .25rem; }
+.dual-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.dual-bars i { display: block; width: 42%; max-width: 20px; border-radius: 5px 5px 2px 2px; transition: height .4s; }
+.dual-bars i.in, .legend i.in { background: linear-gradient(180deg, var(--violet), #6b93f0); }
+.dual-bars i.out, .legend i.out { background: linear-gradient(180deg, var(--orange), #f57a5c); }
+.legend { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-top: .6rem; font-size: .85rem; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: .3rem; vertical-align: -1px; }
+.prog { display: grid; gap: .3rem; }
+
+.sms-analysis { align-items: flex-start; }
+.sms-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .2rem; font-size: .9rem; }
+.sms-list li { display: flex; align-items: center; gap: .4rem; }
+.sms-list.warn { margin-top: .4rem; font-weight: 600; }
+code { background: #eef2fc; padding: .05rem .35rem; border-radius: 5px; font-size: .85em; }
+
+.report-sheet { max-width: 820px; margin: 0 auto; padding: 1.6rem; }
+.report-head { display: flex; align-items: center; gap: 1rem; border-bottom: 2px solid var(--violet); padding-bottom: .8rem; margin-bottom: .5rem; }
+.report-head h1 { margin: 0; }
+table.plain { box-shadow: none; }
+table.plain td, table.plain th { padding: .45rem .3rem; border-bottom: 1px solid var(--line); }
+table.plain tr.total td { font-weight: 800; font-size: 1.05rem; border-top: 2px solid var(--ink); border-bottom: 0; }
+.signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2.5rem; text-align: center; }
+.signatures span { display: block; border-bottom: 1px solid var(--ink); height: 3rem; }
+tfoot td { background: #f7f9fe; font-size: .92rem; }
+
+@media print {
+  .topbar, .sidebar, .bottom-nav, .no-print, .toasts { display: none !important; }
+  .shell { padding-left: 0 !important; }
+  body { background: #fff; }
+  .main { padding: 0 !important; max-width: none; }
+  .card.report-sheet { box-shadow: none; border: 0; padding: 0; }
+  @page { margin: 16mm; }
+}

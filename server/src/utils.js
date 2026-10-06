@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import db, { tx, getSetting } from './db.js';
 import { mailerConfigured, sendMail } from './mailer.js';
+import { queueExternal } from './gateway.js';
 
-export const PERMISSIONS = ['members', 'payments', 'forum', 'announcements', 'elections'];
+export const PERMISSIONS = ['members', 'payments', 'forum', 'announcements', 'elections', 'finance'];
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -70,6 +71,7 @@ export function notify(userId, type, title, body = null, link = null) {
   db.prepare(
     'INSERT INTO notifications(user_id, type, title, body, link) VALUES(?,?,?,?,?)'
   ).run(userId, type, title, body, link);
+  queueExternal([userId], type, title, body, link); // SMS / WhatsApp si le membre a donné son accord
   if (EMAIL_TYPES.has(type) && mailerConfigured()) {
     const u = db.prepare('SELECT email, first_name FROM users WHERE id = ?').get(userId);
     if (u?.email) {
@@ -89,6 +91,7 @@ export function notifyMany(userIds, type, title, body = null, link = null) {
     'INSERT INTO notifications(user_id, type, title, body, link) VALUES(?,?,?,?,?)'
   );
   tx(() => userIds.forEach((id) => stmt.run(id, type, title, body, link)));
+  queueExternal(userIds, type, title, body, link);
 }
 
 export function activeMemberIds() {
@@ -131,7 +134,7 @@ export function sendContributionReminders() {
 export function publicUser(u) {
   if (!u) return null;
   const { password_hash, failed_attempts, locked_until, ...rest } = u;
-  return { ...rest, must_change_password: !!u.must_change_password, permissions: typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions };
+  return { ...rest, must_change_password: !!u.must_change_password, sms_optin: !!u.sms_optin, whatsapp_optin: !!u.whatsapp_optin, permissions: typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions };
 }
 
 /** Règle de mot de passe commune : 8 caractères min., au moins une lettre et un chiffre. */

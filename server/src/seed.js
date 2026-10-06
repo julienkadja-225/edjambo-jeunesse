@@ -1,14 +1,19 @@
 // Données de test : node src/seed.js  (réinitialise la base)
+if (process.env.NODE_ENV === 'production' && process.env.FORCE_SEED !== '1') {
+  console.error('Refus : le seed EFFACE toute la base et crée des comptes de test connus. Il est interdit en production.');
+  process.exit(1);
+}
 import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
 import db, { DB_PATH, setSetting, tx } from './db.js';
 import { currentMonth, sha256 } from './utils.js';
+import { analyzePaymentSms } from './payment-sms.js';
 
 const MEMBER_COUNT = parseInt(process.env.SEED_MEMBERS || '2000');
 const ADMIN_PASSWORD = 'Admin@2026';
 const MEMBER_PASSWORD = 'Jeunesse2026!';
 
-for (const t of ['message_reports','messages','conversation_members','conversations','blocks','password_resets','audit_logs','notifications','ballots','voters','candidates','elections','proposal_votes','reactions','posts','threads','forum_categories','rsvps','reshares','announcements','contributions','payment_methods','refresh_tokens','users','settings'])
+for (const t of ['outbox','expenses','budgets','message_reports','messages','conversation_members','conversations','blocks','password_resets','audit_logs','notifications','ballots','voters','candidates','elections','proposal_votes','reactions','posts','threads','forum_categories','rsvps','reshares','announcements','contributions','payment_methods','refresh_tokens','users','settings'])
   db.exec(`DELETE FROM ${t}`);
 db.exec("DELETE FROM sqlite_sequence");
 
@@ -31,12 +36,12 @@ const insUser = db.prepare(
 );
 const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString();
 
-const ALL = ['members','payments','forum','announcements','elections'];
+const ALL = ['members','payments','forum','announcements','elections','finance'];
 const admins = [
   ['super_admin', ALL, 'Super', 'Admin', 'superadmin@edjambo.org', '+22501000000'],
   ['admin', ALL, 'Aïcha', 'Koné', 'aicha@edjambo.org', '+22501000001'],
   ['admin', ['members','payments'], 'Serge', 'Yao', 'serge@edjambo.org', '+22501000002'],
-  ['admin', ['payments'], 'Nadia', 'Traoré', 'nadia@edjambo.org', '+22501000003'],
+  ['admin', ['payments', 'finance'], 'Nadia', 'Traoré', 'nadia@edjambo.org', '+22501000003'],
   ['admin', ['forum','announcements'], 'Boris', 'Aka', 'boris@edjambo.org', '+22501000004'],
   ['admin', ['elections','announcements'], 'Léa', 'Diallo', 'lea@edjambo.org', '+22501000005'],
 ];
@@ -213,6 +218,63 @@ tx(() => {
   mem.run(g2, m6, 'member', 'active', m4, ts(119), ts(100), 0);
   mem.run(g2, aya, 'member', 'invited', m4, ts(120), null, 0);
   msg.run(g2, m4, 'system', 'Membre4 a créé le groupe « Comité Culture »', ts(120));
+});
+
+
+// ---- Vérification assistée des paiements, finances et notifications SMS (démonstration) ----
+tx(() => {
+  const methods = db.prepare('SELECT * FROM payment_methods').all();
+  const expected = 1000;
+  const fmtDate = (iso) => { const d = new Date(Math.min(new Date(iso), Date.now() - 36e5)); return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`; };
+
+  // 1) SMS de confirmation sur les paiements en attente : ~60 % cohérents, ~25 % douteux, le reste sans SMS (capture seule)
+  const pending = db.prepare("SELECT c.id, c.reference, c.amount, c.method_label, c.created_at FROM contributions c WHERE c.status = 'pending' ORDER BY c.id").all();
+  const upd = db.prepare('UPDATE contributions SET sms_text = ?, sms_flags = ?, sms_level = ? WHERE id = ?');
+  pending.forEach((c, i) => {
+    const roll = (i * 37) % 100;
+    if (roll >= 85) return; // pas de SMS
+    const m = methods.find((x) => x.label === c.method_label) || methods[0];
+    if (m.type === 'bank') return;
+    const wrong = roll >= 60; // SMS douteux : mauvais numéro et montant trop faible
+    const num = wrong ? '0799999999' : m.account_number.replace(/\s/g, '');
+    const amount = wrong ? 500 : c.amount;
+    const op = m.label === 'Orange Money' ? 'Orange Money' : 'MTN MoMo';
+    const text = `${op}: Vous avez envoye ${amount} FCFA a ${num} (JEUNESSE EDJAMBO) le ${fmtDate(c.created_at)}. ID de transaction: ${c.reference || 'TX' + (900000 + i)}. Frais: 0 FCFA.`;
+    const a = analyzePaymentSms(text, { methods, expectedAmount: expected, isDuplicate: () => false });
+    upd.run(text, JSON.stringify(a.flags), a.level, c.id);
+  });
+
+  // 2) Finances : solde initial, budgets de l'année et dépenses des 6 derniers mois
+  const setS = (k, v) => db.prepare('INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(k, String(v));
+  setS('opening_balance', 150000);
+  const year = new Date().getUTCFullYear();
+  const bud = db.prepare('INSERT INTO budgets(year, category, amount) VALUES(?,?,?)');
+  [['evenements', 600000], ['materiel', 250000], ['solidarite', 400000], ['communication', 120000], ['fonctionnement', 180000]].forEach(([c, a]) => bud.run(year, c, a));
+  const adminId = (email) => db.prepare('SELECT id FROM users WHERE email = ?').get(email).id;
+  const aicha = adminId('aicha@edjambo.org');
+  const nadia = adminId('nadia@edjambo.org');
+  const exp = db.prepare('INSERT INTO expenses(amount, category, description, spent_at, status, created_by, reviewed_by, reviewed_at, reject_reason, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)');
+  const day = (monthsAgo, d) => { const t = new Date(); t.setUTCDate(1); t.setUTCMonth(t.getUTCMonth() - monthsAgo); t.setUTCDate(d); return t.toISOString().slice(0, 10); };
+  const lines = [
+    [5, 12, 45000, 'materiel', 'Achat de maillots pour le tournoi'], [5, 20, 30000, 'communication', 'Impression des affiches'],
+    [4, 8, 60000, 'evenements', "Location de la salle des fêtes (assemblée générale)"], [4, 25, 25000, 'solidarite', 'Aide aux familles sinistrées'],
+    [3, 5, 38000, 'fonctionnement', 'Connexion internet et fournitures du bureau'], [3, 18, 90000, 'evenements', 'Sonorisation du concert de la jeunesse'],
+    [2, 10, 52000, 'materiel', 'Ballons, filets et pharmacie de terrain'], [2, 22, 40000, 'solidarite', 'Soutien scolaire : fournitures'],
+    [1, 6, 33000, 'communication', 'Banderoles et T-shirts de la jeunesse'], [1, 19, 75000, 'evenements', 'Tournoi inter-quartiers : arbitrage et trophées'],
+    [0, 2, 22000, 'fonctionnement', 'Abonnement et frais de tenue de compte'],
+  ];
+  lines.forEach(([mAgo, d, amount, cat, desc], i) => {
+    const date = day(mAgo, d);
+    if (date > new Date().toISOString().slice(0, 10)) return;
+    exp.run(amount, cat, desc, date, 'approved', i % 2 ? aicha : nadia, i % 2 ? nadia : aicha, date + 'T12:00:00Z', null, date + 'T09:00:00Z');
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  exp.run(48000, 'evenements', 'Journée de salubrité du marché : sacs, gants, rafraîchissements', today, 'pending', nadia, null, null, null, new Date().toISOString());
+  exp.run(15000, 'materiel', 'Réparation du matériel de sonorisation', today, 'rejected', nadia, aicha, new Date().toISOString(), 'Facture manquante : merci de joindre le justificatif', new Date().toISOString());
+
+  // 3) Notifications SMS / WhatsApp : quelques membres ont donné leur accord (démo)
+  db.prepare("UPDATE users SET sms_optin = 1 WHERE email IN ('membre1@edjambo.org','membre3@edjambo.org','membre4@edjambo.org','membre5@edjambo.org')").run();
+  db.prepare("UPDATE users SET whatsapp_optin = 1 WHERE email IN ('membre6@edjambo.org','membre7@edjambo.org')").run();
 });
 
 console.log(`Base initialisée : ${DB_PATH}`);

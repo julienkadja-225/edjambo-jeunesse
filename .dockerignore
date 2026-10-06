@@ -1,0 +1,12 @@
+**/node_modules
+client/dist
+server/data
+server/uploads
+server/backups
+server/test
+.git
+.github
+docs
+*.md
+.env
+**/.env

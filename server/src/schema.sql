@@ -269,3 +269,47 @@ CREATE TABLE IF NOT EXISTS message_reports (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   UNIQUE (message_id, reporter_id)
 );
+
+-- ============ Transparence financière ============
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  amount INTEGER NOT NULL CHECK (amount > 0),
+  category TEXT NOT NULL,
+  description TEXT NOT NULL,
+  spent_at TEXT NOT NULL,                       -- AAAA-MM-JJ
+  receipt_file TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  reviewed_by INTEGER REFERENCES users(id),     -- toujours différent de created_by (double validation)
+  reviewed_at TEXT,
+  reject_reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(spent_at, status);
+
+CREATE TABLE IF NOT EXISTS budgets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  year INTEGER NOT NULL,
+  category TEXT NOT NULL,
+  amount INTEGER NOT NULL CHECK (amount >= 0),
+  UNIQUE (year, category)
+);
+
+-- ============ Passerelle SMS / WhatsApp : file d'envoi persistante ============
+CREATE TABLE IF NOT EXISTS outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  channel TEXT NOT NULL CHECK (channel IN ('sms','whatsapp')),
+  to_addr TEXT NOT NULL,
+  event_type TEXT,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','failed','simulated','skipped')),
+  error TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT,
+  provider_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  sent_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox(created_at);

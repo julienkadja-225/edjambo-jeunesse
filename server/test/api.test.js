@@ -9,6 +9,8 @@ process.env.DB_PATH = path.join(tmp, 'test.db');
 process.env.UPLOAD_DIR = path.join(tmp, 'uploads');
 process.env.SEED_MEMBERS = '60';
 process.env.AUTH_RATE_LIMIT = '1000';
+process.env.API_RATE_LIMIT = '100000';
+process.env.API_RATE_LIMIT_ANON = '100000';
 
 let server, base;
 before(async () => {
@@ -31,7 +33,7 @@ const login = async (identifier, password) => (await call('POST', '/auth/login',
 
 test('inscription → en attente → refus de connexion → approbation → connexion', async () => {
   const form = new FormData();
-  Object.entries({ first_name: 'Test', last_name: 'Jeune', email: 'nouveau@test.org', password: 'Motdepasse1', age: '22', neighborhood: 'Centre-ville' }).forEach(([k, v]) => form.append(k, v));
+  Object.entries({ first_name: 'Test', last_name: 'Jeune', email: 'nouveau@test.org', password: 'Motdepasse1', age: '22', neighborhood: 'Centre-ville', accept_terms: '1' }).forEach(([k, v]) => form.append(k, v));
   const reg = await call('POST', '/auth/register', { form });
   assert.equal(reg.status, 201);
   assert.equal((await call('POST', '/auth/login', { body: { identifier: 'nouveau@test.org', password: 'Motdepasse1' } })).status, 403);
@@ -221,7 +223,7 @@ test('réinitialisation par un admin : mot de passe temporaire, changement oblig
 
 test('export CSV : permission, BOM Excel, neutralisation des formules, téléphones conservés', async () => {
   const form = new FormData();
-  Object.entries({ first_name: '=CMD()', last_name: 'Pirate', phone: '+2250799000111', password: 'Motdepasse1', age: '20', neighborhood: 'Gare' }).forEach(([k, v]) => form.append(k, v));
+  Object.entries({ first_name: '=CMD()', last_name: 'Pirate', phone: '+2250799000111', password: 'Motdepasse1', age: '20', neighborhood: 'Gare', accept_terms: '1' }).forEach(([k, v]) => form.append(k, v));
   assert.equal((await call('POST', '/auth/register', { form })).status, 201);
   const m = await login('membre1@edjambo.org', 'Jeunesse2026!');
   const denied = await fetch(`${base}/members/export.csv`, { headers: { Authorization: `Bearer ${m.accessToken}` } });

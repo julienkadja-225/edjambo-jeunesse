@@ -14,18 +14,27 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeou
 db.exec(fs.readFileSync(path.join(here, 'schema.sql'), 'utf8'));
 
 // Migrations légères : colonnes ajoutées après la première version du schéma
-{
-  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
-  const add = {
-    failed_attempts: 'INTEGER NOT NULL DEFAULT 0',
-    locked_until: 'TEXT',
-    must_change_password: 'INTEGER NOT NULL DEFAULT 0',
-    password_changed_at: 'TEXT',
-  };
-  for (const [name, def] of Object.entries(add)) {
-    if (!cols.includes(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${def}`);
+function addColumns(table, columns) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  for (const [name, def] of Object.entries(columns)) {
+    if (!cols.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`);
   }
 }
+addColumns('users', {
+  failed_attempts: 'INTEGER NOT NULL DEFAULT 0',
+  locked_until: 'TEXT',
+  must_change_password: 'INTEGER NOT NULL DEFAULT 0',
+  password_changed_at: 'TEXT',
+  sms_optin: 'INTEGER NOT NULL DEFAULT 0',       // consentement aux SMS
+  whatsapp_optin: 'INTEGER NOT NULL DEFAULT 0',  // consentement à WhatsApp
+  consent_at: 'TEXT',        // acceptation de la politique de confidentialité à l\'inscription
+  anonymized_at: 'TEXT',     // compte supprimé à la demande du membre (données personnelles effacées)
+});
+addColumns('contributions', {
+  sms_text: 'TEXT',                 // SMS de confirmation collé par le membre
+  sms_flags: "TEXT NOT NULL DEFAULT '[]'", // incohérences détectées (JSON)
+  sms_level: "TEXT NOT NULL DEFAULT 'none'", // none | consistent | review
+});
 
 export function tx(fn) {
   db.exec('BEGIN IMMEDIATE');

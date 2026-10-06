@@ -50,7 +50,12 @@ async function send(path, { method = 'GET', body, form } = {}, retry = true) {
   let payload;
   if (form) payload = form;
   else if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
-  const res = await fetch('/api' + path, { method, headers, body: payload });
+  let res;
+  try {
+    res = await fetch('/api' + path, { method, headers, body: payload });
+  } catch {
+    throw new ApiError('Connexion impossible. Vérifiez votre réseau puis réessayez.', 0);
+  }
   if (res.status === 401 && retry && tokens?.refreshToken && !path.startsWith('/auth/')) {
     if (await refresh()) return send(path, { method, body, form }, false);
     setTokens(null);

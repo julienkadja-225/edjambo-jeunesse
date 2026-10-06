@@ -3,6 +3,7 @@ import path from 'node:path';
 import db, { getSetting, setSetting } from '../db.js';
 import { auth, requirePerm } from '../auth.js';
 import { checkMagic, proofUpload, PROOF_DIR, removeFile } from '../upload.js';
+import { FLAG_LABELS, analyzePaymentSms } from '../payment-sms.js';
 import {
   HttpError, audit, bad, currentMonth, hasPerm, isUpToDate, notFound, notify, notifyAdmins,
   pageResult, paginate, sendContributionReminders, sendCsv, str,
@@ -73,6 +74,28 @@ r.put('/contribution-settings', requirePerm('payments'), (req, res) => {
 });
 
 /* ---------- Soumission & historique du membre ---------- */
+/** Analyse d'un SMS de confirmation Mobile Money (cohérence avec les comptes et le montant attendus). */
+function analyzeSms(text) {
+  return analyzePaymentSms(text, {
+    methods: db.prepare('SELECT * FROM payment_methods WHERE active = 1').all(),
+    expectedAmount: parseInt(getSetting('monthly_amount', '1000')),
+    isDuplicate: (ref) => !!db.prepare("SELECT 1 FROM contributions WHERE reference = ? AND status != 'rejected'").get(ref),
+  });
+}
+
+r.post('/contributions/parse-sms', (req, res) => {
+  const text = String(req.body.text || '').slice(0, 1000);
+  if (text.trim().length < 10) throw bad('Collez le SMS de confirmation complet');
+  const a = analyzeSms(text);
+  res.json({
+    level: a.level,
+    flags: a.flags.map((f) => ({ code: f, label: FLAG_LABELS[f] })),
+    info: a.info,
+    parsed: { operator: a.parsed.operator, amount: a.parsed.amount, reference: a.parsed.reference, date: a.parsed.date },
+    suggested: { method_id: a.matched_method_id, amount: a.parsed.amount, reference: a.parsed.reference },
+  });
+});
+
 r.post('/contributions', proofUpload.single('proof'), checkMagic, (req, res) => {
   const file = req.file?.filename || null;
   try {
@@ -82,9 +105,11 @@ r.post('/contributions', proofUpload.single('proof'), checkMagic, (req, res) => 
     if (month > currentMonth()) throw bad('Impossible de payer un mois futur');
     const method = db.prepare('SELECT * FROM payment_methods WHERE id = ? AND active = 1').get(parseInt(req.body.method_id));
     if (!method) throw bad('Moyen de paiement invalide');
-    const reference = str(req.body.reference ?? '', { max: 80 }) || null;
-    if (!file && !reference) throw bad('Joignez une preuve (capture) ou saisissez la référence de transaction');
-    const amount = parseInt(req.body.amount) || parseInt(getSetting('monthly_amount', '1000'));
+    const smsText = str(req.body.sms_text ?? '', { max: 1000 }) || null;
+    const sms = smsText ? analyzeSms(smsText) : null; // ré-analysé côté serveur : on ne se fie jamais au navigateur
+    const reference = str(req.body.reference ?? '', { max: 80 }) || sms?.parsed.reference || null;
+    if (!file && !reference && !smsText) throw bad('Joignez une preuve (capture), le SMS de confirmation ou la référence de transaction');
+    const amount = parseInt(req.body.amount) || sms?.parsed.amount || parseInt(getSetting('monthly_amount', '1000'));
     if (!(amount > 0 && amount < 10_000_000)) throw bad('Montant invalide');
     const dup = db
       .prepare("SELECT status FROM contributions WHERE user_id = ? AND month = ? AND status IN ('pending','approved')")
@@ -94,8 +119,8 @@ r.post('/contributions', proofUpload.single('proof'), checkMagic, (req, res) => 
       throw new HttpError(409, 'Cette référence de transaction a déjà été soumise');
 
     const info = db
-      .prepare('INSERT INTO contributions(user_id, month, amount, method_id, method_label, reference, proof_file) VALUES(?,?,?,?,?,?,?)')
-      .run(req.user.id, month, amount, method.id, method.label, reference, file);
+      .prepare('INSERT INTO contributions(user_id, month, amount, method_id, method_label, reference, proof_file, sms_text, sms_flags, sms_level) VALUES(?,?,?,?,?,?,?,?,?,?)')
+      .run(req.user.id, month, amount, method.id, method.label, reference, file, smsText, JSON.stringify(sms?.flags || []), sms?.level || 'none');
     notifyAdmins('payments', 'payment', 'Nouvelle preuve de paiement', `${req.user.first_name} ${req.user.last_name} — ${month}`, '/admin/paiements');
     res.status(201).json({ id: Number(info.lastInsertRowid) });
   } catch (e) {
@@ -125,6 +150,7 @@ r.get('/contributions/stats', requirePerm('payments'), (_req, res) => {
   const total = db.prepare("SELECT COALESCE(SUM(amount),0) s FROM contributions WHERE status='approved'").get().s;
   const monthTotal = db.prepare("SELECT COALESCE(SUM(amount),0) s FROM contributions WHERE status='approved' AND month=?").get(month).s;
   const pending = db.prepare("SELECT COUNT(*) n FROM contributions WHERE status='pending'").get().n;
+  const pendingConsistent = db.prepare("SELECT COUNT(*) n FROM contributions WHERE status='pending' AND sms_level='consistent'").get().n;
   const active = db.prepare("SELECT COUNT(*) n FROM users WHERE role='member' AND status='active'").get().n;
   const paid = db.prepare("SELECT COUNT(DISTINCT user_id) n FROM contributions WHERE status='approved' AND month=?").get(month).n;
   const history = db
@@ -132,7 +158,7 @@ r.get('/contributions/stats', requirePerm('payments'), (_req, res) => {
     .all()
     .reverse();
   res.json({
-    month, total_collected: total, month_collected: monthTotal, pending,
+    month, total_collected: total, month_collected: monthTotal, pending, pending_consistent: pendingConsistent,
     active_members: active, paid_members: paid, defaulters: Math.max(0, active - paid),
     rate: active ? Math.round((paid / active) * 100) : 0, history,
   });
@@ -185,6 +211,10 @@ r.get('/contributions', requirePerm('payments'), (req, res) => {
     where.push('c.status = ?');
     args.push(req.query.status);
   }
+  if (['consistent', 'review', 'none'].includes(req.query.level)) {
+    where.push('c.sms_level = ?');
+    args.push(req.query.level);
+  }
   if (req.query.month && MONTH_RE.test(req.query.month)) {
     where.push('c.month = ?');
     args.push(req.query.month);
@@ -199,12 +229,13 @@ r.get('/contributions', requirePerm('payments'), (req, res) => {
   const rows = db
     .prepare(
       `SELECT c.id, c.user_id, c.month, c.amount, c.method_label, c.reference, c.proof_file IS NOT NULL AS has_proof,
-              c.proof_file, c.status, c.reject_reason, c.created_at, c.reviewed_at,
+              c.proof_file, c.status, c.reject_reason, c.created_at, c.reviewed_at, c.sms_text, c.sms_flags, c.sms_level,
               u.first_name, u.last_name, u.phone, u.neighborhood
        FROM contributions c JOIN users u ON u.id=c.user_id WHERE ${w}
        ORDER BY (c.status='pending') DESC, c.created_at ${req.query.status === 'pending' ? 'ASC' : 'DESC'} LIMIT ? OFFSET ?`
     )
-    .all(...args, p.limit, p.offset);
+    .all(...args, p.limit, p.offset)
+    .map((c) => ({ ...c, sms_flags: JSON.parse(c.sms_flags || '[]').map((f) => ({ code: f, label: FLAG_LABELS[f] || f })) }));
   res.json(pageResult(rows, total, p));
 });
 
@@ -224,6 +255,22 @@ function review(req, res, status) {
 }
 r.post('/contributions/:id/approve', requirePerm('payments'), (req, res) => review(req, res, 'approved'));
 r.post('/contributions/:id/reject', requirePerm('payments'), (req, res) => review(req, res, 'rejected'));
+
+/** Validation en masse : uniquement les paiements en attente dont le SMS est cohérent (aucune incohérence détectée). */
+r.post('/contributions/bulk-approve', requirePerm('payments'), (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map((x) => parseInt(x)).filter(Boolean))].slice(0, 300);
+  if (!ids.length) throw bad('Aucun paiement sélectionné');
+  const sel = db.prepare("SELECT * FROM contributions WHERE id = ? AND status = 'pending' AND sms_level = 'consistent'");
+  const upd = db.prepare("UPDATE contributions SET status = 'approved', reviewed_by = ?, reviewed_at = ? WHERE id = ? AND status = 'pending'");
+  const done = [];
+  for (const id of ids) {
+    const c = sel.get(id);
+    if (c && upd.run(req.user.id, new Date().toISOString(), id).changes) done.push(c);
+  }
+  for (const c of done) notify(c.user_id, 'payment', 'Cotisation validée', `Votre cotisation de ${c.month} a été approuvée.`, '/cotisations');
+  audit(req.user.id, 'payment.bulk_approve', 'contribution', null, `${done.length} paiement(s) cohérent(s) validé(s)`);
+  res.json({ approved: done.length, skipped: ids.length - done.length });
+});
 
 /** Preuve de paiement : visible uniquement par son auteur ou par l'équipe « payments ». */
 r.get('/contributions/:id/proof', (req, res) => {

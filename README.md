@@ -26,7 +26,7 @@ Version « production » (un seul processus qui sert l'API **et** l'interface) :
 npm run build && npm start      # http://localhost:4000
 ```
 
-Tests d'intégration de l'API (38 tests, exécutés automatiquement par GitHub Actions à chaque envoi) : `npm test`.
+Tests d'intégration de l'API (40 tests, exécutés automatiquement par GitHub Actions à chaque envoi) : `npm test`.
 
 ## Comptes de test (après `npm run seed`)
 
@@ -149,7 +149,7 @@ BACKUP_DIR=./backups   BACKUP_KEEP=14   AUTO_BACKUP=1
 
 Guide complet (Docker ou Node/systemd, HTTPS, premier Super Admin, sauvegardes, mises à jour, liste de contrôle) : **[docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)**.
 
-En production : `NODE_ENV=production` + `JWT_SECRET` obligatoires ; `npm run seed` est **refusé** (il efface la base) ; le premier compte se crée avec `npm run create-admin -- --email … --first … --last …`.
+Hébergeurs : Docker, Node/systemd ou **Render** (`render.yaml` fourni). En production : `NODE_ENV=production` + `JWT_SECRET` obligatoires (erreur au démarrage sinon) ; `npm run seed` est **refusé** (il efface la base) ; le premier compte se crée avec `npm run create-admin -- --email … --first … --last …`.
 
 ## Vos données personnelles
 

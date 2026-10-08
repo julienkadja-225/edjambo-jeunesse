@@ -9,7 +9,7 @@
     "seed": "node --env-file-if-exists=.env --no-warnings src/seed.js",
     "create-admin": "node --env-file-if-exists=.env --no-warnings src/create-admin.js",
     "backup": "node --env-file-if-exists=.env --no-warnings src/backup.js",
-    "test": "node --env-file-if-exists=.env --no-warnings --test test/api.test.js test/messages.test.js test/features.test.js test/sms-parser.test.js test/hardening.test.js"
+    "test": "node --env-file-if-exists=.env --no-warnings --test test/api.test.js test/messages.test.js test/features.test.js test/sms-parser.test.js test/hardening.test.js test/deploy.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

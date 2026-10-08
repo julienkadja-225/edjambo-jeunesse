@@ -46,6 +46,23 @@ User=jeunesse
 WantedBy=multi-user.target
 ```
 
+## Option C — Render (hébergeur « clé en main »)
+
+1. **New → Blueprint**, choisissez le dépôt : le fichier `render.yaml` crée le service, un secret `JWT_SECRET` généré automatiquement et un **disque persistant**. (Ou **New → Web Service** → Runtime *Docker* ; dans ce cas ajoutez les variables ci-dessous à la main.)
+2. Variables d'environnement (onglet **Environment**) :
+
+| Variable | Valeur |
+|---|---|
+| `JWT_SECRET` | **Obligatoire.** Bouton *Generate* de Render, ou `openssl rand -hex 48`. À conserver : si elle change, tout le monde est déconnecté. |
+| `NODE_ENV` | `production` (déjà défini dans l'image) |
+| `APP_URL` | `https://<votre-service>.onrender.com` (ou votre domaine) |
+| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (+ `BOOTSTRAP_ADMIN_FIRST`, `BOOTSTRAP_ADMIN_LAST`) | Premier Super Admin, créé au démarrage s'il n'en existe aucun. Mot de passe : 8 caractères minimum, lettres **et** chiffres. Il devra être changé à la première connexion ; **retirez ensuite ces variables**. |
+
+3. **Disque persistant — indispensable.** Le conteneur Render est éphémère : sans disque monté sur `/data`, la base et les fichiers envoyés sont **effacés à chaque redéploiement ou redémarrage**. Les disques exigent une offre payante (Starter). Sur l'offre gratuite, la plateforme fonctionne pour une démonstration mais **ne doit pas recevoir de vraies données** (le service s'endort aussi après quelques minutes d'inactivité).
+4. Ouvrez l'adresse du service et connectez-vous avec le compte créé à l'étape 2.
+
+> Erreur `JWT_SECRET doit être défini en production` dans les journaux : la variable `JWT_SECRET` est absente. Ajoutez-la dans **Environment**, puis **Manual Deploy → Deploy latest commit**.
+
 ## HTTPS (reverse proxy)
 
 Placez Nginx ou Caddy devant l'application (port 4000). Avec **Caddy**, deux lignes suffisent (certificat gratuit et renouvelé automatiquement) :
@@ -69,7 +86,7 @@ docker compose exec jeunesse node --no-warnings src/create-admin.js --email moi@
 npm run create-admin -- --email moi@exemple.org --first Prénom --last Nom --phone 0700000000
 ```
 
-Un mot de passe temporaire est affiché **une seule fois** ; il devra être changé à la première connexion. Ensuite, depuis `/admin/equipe`, créez les autres administrateurs et donnez-leur les permissions utiles (membres, cotisations, forum, annonces, élections, **finances**). Dans `/admin/paiement-infos`, saisissez les numéros Orange Money / MTN / le compte bancaire de l'association.
+(Sans accès terminal, par exemple sur Render : définissez les variables `BOOTSTRAP_ADMIN_*`, voir l'option C.) Un mot de passe temporaire est affiché **une seule fois** ; il devra être changé à la première connexion. Ensuite, depuis `/admin/equipe`, créez les autres administrateurs et donnez-leur les permissions utiles (membres, cotisations, forum, annonces, élections, **finances**). Dans `/admin/paiement-infos`, saisissez les numéros Orange Money / MTN / le compte bancaire de l'association.
 
 ## Configuration facultative
 

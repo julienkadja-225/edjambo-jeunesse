@@ -1,0 +1,29 @@
+# Déploiement Render en un clic (New → Blueprint, puis choisir ce dépôt).
+# ⚠️ Le disque persistant (ci-dessous) exige une offre PAYANTE (« Starter » minimum).
+# Sans disque, la base SQLite et les fichiers envoyés sont EFFACÉS à chaque redéploiement ou redémarrage.
+services:
+  - type: web
+    name: edjambo-jeunesse
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true          # secret aléatoire créé par Render, à ne jamais changer ensuite
+      - key: APP_URL
+        sync: false                  # à saisir : https://<votre-service>.onrender.com
+      # Premier Super Admin (aucun terminal sur Render) : à saisir, puis à RETIRER après la première connexion
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_ADMIN_FIRST
+        sync: false
+      - key: BOOTSTRAP_ADMIN_LAST
+        sync: false
+    disk:
+      name: edjambo-data
+      mountPath: /data               # base, photos, preuves de paiement et sauvegardes
+      sizeGB: 1

@@ -21,5 +21,5 @@ RUN mkdir -p /data && chown -R node:node /data /app
 VOLUME /data
 EXPOSE 4000
 USER node
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD wget -qO- http://localhost:4000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD wget -qO- http://localhost:${PORT}/api/health || exit 1
 CMD ["node", "--no-warnings", "src/index.js"]
